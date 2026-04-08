@@ -43,6 +43,7 @@ This project automates the lifecycle between GitHub and Jira, enabling seamless 
 ### Prerequisites
 1. **GitHub Repository Secrets:**
    - `JIRA_TOKEN`: Personal Access Token for Jira API authentication (Bearer token format)
+   - `JIRA_PROJECT_KEY` (optional): Jira project key for GitHub issue creation (defaults to `AQD` if not set)
 
 2. **Jira Configuration:**
    - Project key (e.g., `AQD`)
@@ -66,6 +67,20 @@ feature/PROJECT-ID-ISSUE-NUMBER
 - `feature/EHC-5678` - Creates/links to Jira issue EHC-5678
 
 **Important:** Branches not matching this pattern will not trigger Jira automation.
+
+### Multi-Project Support
+
+The system supports multiple Jira projects:
+
+**For GitHub Issues:**
+- Set `JIRA_PROJECT_KEY` secret in GitHub repository settings
+- If not set, defaults to `AQD`
+- Example: Set `JIRA_PROJECT_KEY=EHC` to create issues in the EHC project
+
+**For Pull Requests & Push Events:**
+- Automatically extracts project key from branch name
+- Example: `feature/EHC-5678` automatically uses the `EHC` project
+- No configuration needed - fully dynamic
 
 ## Workflow Files
 
