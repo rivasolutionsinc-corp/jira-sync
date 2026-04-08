@@ -27,7 +27,7 @@ except ModuleNotFoundError as exc:
 mcp = FastMCP("Jira Skills")
 
 # Configuration from environment (Roo passes these via mcp_settings.json)
-JIRA_URL = "https://cmext.ahrq.gov/jira"
+JIRA_URL = os.getenv("JIRA_URL", "https://cmext.ahrq.gov/jira")
 JIRA_TOKEN = os.getenv("JIRA_TOKEN")
 
 def get_headers():
