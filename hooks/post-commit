@@ -1,0 +1,105 @@
+#!/bin/bash
+# Git post-commit hook
+# Automatically updates MEMORY_BANK_INDEX.md, SESSION_LOG.md, migrates docs to Roo Memory, and syncs to vector database
+# Install: bash hooks/install-hooks.sh
+
+PROJECT_DIR="$(pwd)"
+PROJECT_NAME="$(basename "$PROJECT_DIR")"
+HOME_DIR="$(eval echo ~)"
+MEMORY_DIR="$HOME_DIR/Documents/Roo_Memory/$PROJECT_NAME"
+MEMORY_BANK_INDEX="$MEMORY_DIR/MEMORY_BANK_INDEX.md"
+SESSION_LOG="$MEMORY_DIR/SESSION_LOG.md"
+AUTO_SYNC_SCRIPT="$PROJECT_DIR/.roo/auto-sync-memory.sh"
+DOCS_DIR="$PROJECT_DIR/docs"
+CONTEXT_BUNDLER="$HOME_DIR/Documents/Roo_Memory/scripts/context_bundler.py"
+
+# Only run if memory directory exists
+if [ ! -d "$MEMORY_DIR" ]; then
+    exit 0
+fi
+
+# Get commit info
+COMMIT_HASH=$(git rev-parse --short HEAD)
+COMMIT_MSG=$(git log -1 --pretty=%B)
+TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# Get list of changed files
+CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD | sed 's/^/  - /')
+
+# Update MEMORY_BANK_INDEX.md with latest commit info
+if [ -f "$MEMORY_BANK_INDEX" ]; then
+    # Create a temporary file
+    TEMP_FILE="$MEMORY_BANK_INDEX.tmp"
+
+    # Process the file line by line
+    {
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^\*\*Last\ Updated:\*\* ]]; then
+                echo "**Last Updated:** $TIMESTAMP"
+            elif [[ "$line" =~ ^\*\*Current\ Branch:\*\* ]]; then
+                echo "**Current Branch:** $CURRENT_BRANCH"
+            else
+                echo "$line"
+            fi
+        done < "$MEMORY_BANK_INDEX"
+    } > "$TEMP_FILE"
+
+    # Replace original with updated version
+    mv "$TEMP_FILE" "$MEMORY_BANK_INDEX"
+fi
+
+# Update SESSION_LOG.md with auto-logged commit entry
+if [ -f "$SESSION_LOG" ]; then
+    # Create auto-logged commit entry
+    AUTO_LOG_ENTRY="## Session: Auto-Logged Commit
+**Date:** $TIMESTAMP
+**Branch:** $CURRENT_BRANCH
+**Commit Hash:** $COMMIT_HASH
+**Commit Message:** $COMMIT_MSG
+
+### Files Changed
+$CHANGED_FILES
+
+### Status
+Auto-logged via post-commit hook. Review and update MEMORY_BANK_INDEX.md if architectural changes were made.
+
+---
+
+"
+
+    # Insert new entry after the header (after line 3)
+    # Read first 3 lines, add new entry, then append rest
+    head -n 3 "$SESSION_LOG" > "$SESSION_LOG.tmp"
+    echo "" >> "$SESSION_LOG.tmp"
+    echo "$AUTO_LOG_ENTRY" >> "$SESSION_LOG.tmp"
+    tail -n +4 "$SESSION_LOG" >> "$SESSION_LOG.tmp"
+    mv "$SESSION_LOG.tmp" "$SESSION_LOG"
+fi
+
+# Migrate documentation files to Roo Memory
+if [ -d "$DOCS_DIR" ]; then
+    # Patterns to migrate (task-specific documentation)
+    for pattern in "*_EXECUTIVE_SUMMARY.md" "*_IMPLEMENTATION*.md" "*_DEPLOYMENT*.md" "*_DIAGNOSTIC*.md" "*_INVESTIGATION*.md" "*_RESOLUTION*.md" "VECTOR_SYNC_*.md" "AUTOMATIC_*.md" "MEMORY_BANK_*.md" "CAG_PROTOCOL_*.md" "LITELLM_*.md"; do
+        for file in "$DOCS_DIR"/$pattern; do
+            if [ -f "$file" ]; then
+                filename=$(basename "$file")
+                cp "$file" "$MEMORY_DIR/$filename" 2>/dev/null || true
+            fi
+        done
+    done
+fi
+
+# Run auto-sync if script exists
+if [ -f "$AUTO_SYNC_SCRIPT" ]; then
+    # Run in background to avoid blocking the commit
+    bash "$AUTO_SYNC_SCRIPT" > /dev/null 2>&1 &
+fi
+
+# Trigger AI Context Bundler for instant memory updates
+if [ -f "$CONTEXT_BUNDLER" ]; then
+    echo "🤖 Triggering AI Context Bundler..."
+    python3 "$CONTEXT_BUNDLER" . > /dev/null 2>&1 &
+fi
+
+exit 0
