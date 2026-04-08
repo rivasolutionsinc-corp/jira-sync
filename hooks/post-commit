@@ -1,7 +1,7 @@
 #!/bin/bash
 # Git post-commit hook
 # Automatically updates MEMORY_BANK_INDEX.md, SESSION_LOG.md, migrates docs to Roo Memory, and syncs to vector database
-# Install: cp .git/hooks/post-commit.sample .git/hooks/post-commit && chmod +x .git/hooks/post-commit
+# Install: bash hooks/install-hooks.sh
 
 PROJECT_DIR="$(pwd)"
 PROJECT_NAME="$(basename "$PROJECT_DIR")"
@@ -11,6 +11,7 @@ MEMORY_BANK_INDEX="$MEMORY_DIR/MEMORY_BANK_INDEX.md"
 SESSION_LOG="$MEMORY_DIR/SESSION_LOG.md"
 AUTO_SYNC_SCRIPT="$PROJECT_DIR/.roo/auto-sync-memory.sh"
 DOCS_DIR="$PROJECT_DIR/docs"
+CONTEXT_BUNDLER="$HOME_DIR/Documents/Roo_Memory/core/scripts/context_bundler.py"
 
 # Only run if memory directory exists
 if [ ! -d "$MEMORY_DIR" ]; then
@@ -48,7 +49,6 @@ if [ -f "$MEMORY_BANK_INDEX" ]; then
     mv "$TEMP_FILE" "$MEMORY_BANK_INDEX"
 fi
 
-
 # Update SESSION_LOG.md with auto-logged commit entry
 if [ -f "$SESSION_LOG" ]; then
     # Create auto-logged commit entry
@@ -63,7 +63,6 @@ $CHANGED_FILES
 
 ### Status
 Auto-logged via post-commit hook. Review and update MEMORY_BANK_INDEX.md if architectural changes were made.
-
 
 ---
 
@@ -97,9 +96,10 @@ if [ -f "$AUTO_SYNC_SCRIPT" ]; then
     bash "$AUTO_SYNC_SCRIPT" > /dev/null 2>&1 &
 fi
 
-exit 0
+# Trigger AI Context Bundler for instant memory updates
+if [ -f "$CONTEXT_BUNDLER" ]; then
+    echo "🤖 Triggering AI Context Bundler..."
+    python3 "$CONTEXT_BUNDLER" . > /dev/null 2>&1 &
+fi
 
-# AI-MEMORY-POST-COMMIT
-# ⚡ Instant update for the local AI's short-term memory
-echo "🤖 Triggering AI Context Bundler..."
-python3 ~/Documents/Roo_Memory/core/scripts/context_bundler.py .
+exit 0
