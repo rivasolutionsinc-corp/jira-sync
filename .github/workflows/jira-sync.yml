@@ -196,9 +196,22 @@ jobs:
             '${{ steps.jira_key.outputs.key }}',
             'PR #${{ github.event.pull_request.number }} merged to ${{ github.event.pull_request.base.ref }}\nMerge commit: ${{ github.event.pull_request.merge_commit_sha }}\nMerged by: ${{ github.event.pull_request.merged_by.login }}\nMerged at: ${{ github.event.pull_request.closed_at }}'
           )
-          success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'Done')
+          print('[DEBUG] Attempting to transition ${{ steps.jira_key.outputs.key }} to Done')
+          # First try to transition to Start Progress (intermediate state)
+          success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'Start Progress')
           if success:
-            print('Issue transitioned to Done')
+            print('[INFO] Issue transitioned to Start Progress')
+            # Then transition to Done
+            success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'Done')
+            if success:
+              print('[SUCCESS] Issue transitioned to Done')
+            else:
+              print('[WARNING] Could not transition to Done from Start Progress')
           else:
-            print('Warning: Could not transition to Done (transition may not exist)')
+            print('[WARNING] Could not transition to Start Progress, trying Done directly')
+            success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'Done')
+            if success:
+              print('[SUCCESS] Issue transitioned to Done')
+            else:
+              print('[ERROR] Could not transition to Done (no valid transition path)')
           "
