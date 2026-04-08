@@ -37,7 +37,7 @@ This project automates the lifecycle between GitHub and a self-hosted Jira insta
 
 ## **🚦 Operational Constraints (DSI)**
 
-* **Authentication:** Always read mcp\_settings.json to initialize the AnythingLLM brain. No hallucinations allowed.  
+* **Authentication:** If your local Roo/MCP environment provisions an `mcp_settings.json`, read that external/local file to initialize the AnythingLLM brain. This repository does **not** store `mcp_settings.json`; it must be provided by the local agent tooling or workspace setup. No hallucinations allowed.  
 * **Git Safety:** Always check the current branch during Pre-Flight. If on a default branch, switch to Git Ops to branch out immediately.  
 * **Drupal Standards:** \- PSR-4 namespacing.  
   * Business logic in Services, not .module files.  
