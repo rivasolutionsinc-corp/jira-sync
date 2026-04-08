@@ -28,7 +28,7 @@ jobs:
         if: github.event_name == 'issues'
         env:
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-          JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY || 'AQD' }}
+          JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY}}
         run: |
           python -c "
           import os
@@ -81,14 +81,30 @@ jobs:
       - name: Install Dependencies
         run: pip install requests python-dotenv
 
-      # Extract Jira Key from PR branch name
+      # Extract Jira Key from PR branch name with fallback to PR context
       - name: Extract Jira Key from Branch
         id: jira_key
         run: |
-          JIRA_KEY=$(echo "${{ github.head_ref }}" | grep -oE '[A-Z]+-[0-9]+')
-          echo "key=$JIRA_KEY" >> $GITHUB_OUTPUT
+          # Try to extract from head_ref (PR branch name)
+          JIRA_KEY=$(echo "${{ github.head_ref }}" | grep -oE '[A-Z]+-[0-9]+' || true)
+          
+          # Fallback to PR context if head_ref extraction fails
           if [ -z "$JIRA_KEY" ]; then
-            echo "Warning: No Jira key found in branch name: ${{ github.head_ref }}"
+            echo "[INFO] No Jira key found in head_ref: ${{ github.head_ref }}"
+            JIRA_KEY=$(echo "${{ github.event.pull_request.head.ref }}" | grep -oE '[A-Z]+-[0-9]+' || true)
+            if [ -n "$JIRA_KEY" ]; then
+              echo "[INFO] Extracted Jira key from PR context: $JIRA_KEY"
+            fi
+          else
+            echo "[INFO] Extracted Jira key from head_ref: $JIRA_KEY"
+          fi
+          
+          echo "key=$JIRA_KEY" >> $GITHUB_OUTPUT
+          
+          if [ -z "$JIRA_KEY" ]; then
+            echo "[WARNING] No Jira key found in branch name or PR context"
+            echo "[DEBUG] head_ref: ${{ github.head_ref }}"
+            echo "[DEBUG] PR head ref: ${{ github.event.pull_request.head.ref }}"
           fi
 
       # Handle PR opened event - Create Jira subtask
