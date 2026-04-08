@@ -28,12 +28,14 @@ jobs:
         if: github.event_name == 'issues'
         env:
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY || 'AQD' }}
         run: |
           python -c "
           import os
           os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
           from jira_integration_script import create_jira_issue, get_issue_details, change_issue_status
-          issue_key = create_jira_issue('AQD', 'GH Issue: ${{ github.event.issue.title }}', 'Description: ${{ github.event.issue.html_url }}\n\n${{ github.event.issue.body }}')
+          project_key = os.getenv('JIRA_PROJECT_KEY', 'AQD')
+          issue_key = create_jira_issue(project_key, 'GH Issue: ${{ github.event.issue.title }}', 'Description: ${{ github.event.issue.html_url }}\n\n${{ github.event.issue.body }}')
           if issue_key:
               details = get_issue_details(issue_key)
               print(f'Issue created: {issue_key}')
