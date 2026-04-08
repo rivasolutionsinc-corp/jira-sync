@@ -15,8 +15,14 @@ import os
 import json
 import sys
 import requests
-from mcp.server.fastmcp import FastMCP
 
+try:
+    from mcp.server.fastmcp import FastMCP
+except ModuleNotFoundError as exc:
+    raise ModuleNotFoundError(
+        "Missing required dependency 'mcp'. Install it in the runtime environment "
+        "before starting jira_mcp_server.py (for example: `pip install mcp`)."
+    ) from exc
 # Initialize FastMCP server
 mcp = FastMCP("Jira Skills")
 
