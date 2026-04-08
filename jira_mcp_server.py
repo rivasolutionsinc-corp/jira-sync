@@ -29,6 +29,7 @@ mcp = FastMCP("Jira Skills")
 # Configuration from environment (Roo passes these via mcp_settings.json)
 JIRA_URL = os.getenv("JIRA_URL", "https://cmext.ahrq.gov/jira")
 JIRA_TOKEN = os.getenv("JIRA_TOKEN")
+REQUEST_TIMEOUT = 30  # seconds; prevents indefinite hangs on network stalls
 
 def get_headers():
     """Standard headers for Jira API calls."""
@@ -51,7 +52,7 @@ def search_jira_issues(jql: str, max_results: int = 10) -> str:
         "fields": "summary,status,assignee"
     }
 
-    response = requests.get(url, headers=get_headers(), params=params)
+    response = requests.get(url, headers=get_headers(), params=params, timeout=REQUEST_TIMEOUT)
 
     if response.status_code == 200:
         data = response.json()
@@ -75,7 +76,7 @@ def search_jira_issues(jql: str, max_results: int = 10) -> str:
 def get_jira_issue(issue_key: str) -> str:
     """Retrieve full details of a Jira issue by its key (e.g., AQD-1234)."""
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}"
-    response = requests.get(url, headers=get_headers())
+    response = requests.get(url, headers=get_headers(), timeout=REQUEST_TIMEOUT)
     if response.status_code == 200:
         data = response.json()
         fields = data.get("fields", {})
@@ -101,7 +102,7 @@ def create_jira_issue(project_key: str, summary: str, description: str, issue_ty
             "issuetype": {"name": issue_type}
         }
     }
-    response = requests.post(url, headers=get_headers(), json=payload)
+    response = requests.post(url, headers=get_headers(), json=payload, timeout=REQUEST_TIMEOUT)
     if response.status_code == 201:
         return f"Issue created successfully: {response.json()['key']}"
     return f"Error: {response.status_code} - {response.text}"
@@ -111,7 +112,7 @@ def add_jira_comment(issue_key: str, comment: str) -> str:
     """Add a comment to an existing Jira issue."""
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/comment"
     payload = {"body": comment}
-    response = requests.post(url, headers=get_headers(), json=payload)
+    response = requests.post(url, headers=get_headers(), json=payload, timeout=REQUEST_TIMEOUT)
     if response.status_code == 201:
         return f"Comment added to {issue_key}"
     return f"Error: {response.status_code} - {response.text}"
@@ -120,7 +121,7 @@ def add_jira_comment(issue_key: str, comment: str) -> str:
 def list_jira_transitions(issue_key: str) -> str:
     """List all available status transitions for a specific Jira issue."""
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/transitions"
-    response = requests.get(url, headers=get_headers())
+    response = requests.get(url, headers=get_headers(), timeout=REQUEST_TIMEOUT)
     if response.status_code == 200:
         transitions = response.json().get("transitions", [])
         if not transitions:
@@ -135,7 +136,7 @@ def transition_jira_issue(issue_key: str, transition_name: str) -> str:
     """Transition a Jira issue to a new status (e.g., 'Start Progress', 'Done')."""
     # 1. Get transitions
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/transitions"
-    res = requests.get(url, headers=get_headers())
+    res = requests.get(url, headers=get_headers(), timeout=REQUEST_TIMEOUT)
     if res.status_code != 200: return "Could not fetch transitions."
 
     transitions = res.json().get("transitions", [])
@@ -146,7 +147,7 @@ def transition_jira_issue(issue_key: str, transition_name: str) -> str:
         return f"Transition '{transition_name}' not found. Available: {available}"
 
     # 2. Post transition
-    response = requests.post(url, headers=get_headers(), json={"transition": {"id": tid}})
+    response = requests.post(url, headers=get_headers(), json={"transition": {"id": tid}}, timeout=REQUEST_TIMEOUT)
     if response.status_code == 204:
         return f"Successfully transitioned {issue_key} to {transition_name}"
     return f"Error: {response.status_code} - {response.text}"
@@ -160,7 +161,7 @@ def verify_access():
 
     try:
         # Test 1: Auth check
-        me_res = requests.get(f"{JIRA_URL}/rest/api/2/myself", headers=get_headers())
+        me_res = requests.get(f"{JIRA_URL}/rest/api/2/myself", headers=get_headers(), timeout=REQUEST_TIMEOUT)
         if me_res.status_code != 200:
             print(f"Auth failed: {me_res.status_code}", file=sys.stderr)
             return False
@@ -171,7 +172,7 @@ def verify_access():
         # Test 2: Project check (ADO & AQD)
         all_projects_accessible = True
         for pk in ["ADO", "AQD"]:
-            p_res = requests.get(f"{JIRA_URL}/rest/api/2/project/{pk}", headers=get_headers())
+            p_res = requests.get(f"{JIRA_URL}/rest/api/2/project/{pk}", headers=get_headers(), timeout=REQUEST_TIMEOUT)
             if p_res.status_code == 200:
                 print(f"Access to {pk}: OK", file=sys.stderr)
             else:
