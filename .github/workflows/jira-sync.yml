@@ -156,11 +156,11 @@ jobs:
           import os
           os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
           from jira_integration_script import change_issue_status
-          success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'In Review')
+          success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'Start Review')
           if success:
-            print('Issue transitioned to In Review')
+            print('Issue transitioned to Start Review')
           else:
-            print('Warning: Could not transition to In Review (transition may not exist)')
+            print('Warning: Could not transition to Start Review (transition may not exist)')
           "
 
       # Handle PR closed without merge
@@ -196,9 +196,9 @@ jobs:
             '${{ steps.jira_key.outputs.key }}',
             'PR #${{ github.event.pull_request.number }} merged to ${{ github.event.pull_request.base.ref }}\nMerge commit: ${{ github.event.pull_request.merge_commit_sha }}\nMerged by: ${{ github.event.pull_request.merged_by.login }}\nMerged at: ${{ github.event.pull_request.closed_at }}'
           )
-          success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'Merged')
+          success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'Done')
           if success:
-            print('Issue transitioned to Merged')
+            print('Issue transitioned to Done')
           else:
-            print('Warning: Could not transition to Merged (transition may not exist)')
+            print('Warning: Could not transition to Done (transition may not exist)')
           "
