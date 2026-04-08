@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - 'feature/**'
+  pull_request:
+    types: [opened, synchronize, ready_for_review, closed]
 
 jobs:
   sync-to-jira:
@@ -61,3 +63,124 @@ jobs:
             # change_issue_status('$JIRA_KEY', 'Start Progress')
             "
           fi
+
+  pr-lifecycle:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: pip install requests python-dotenv
+
+      # Extract Jira Key from PR branch name
+      - name: Extract Jira Key from Branch
+        id: jira_key
+        run: |
+          JIRA_KEY=$(echo "${{ github.head_ref }}" | grep -oE '[A-Z]+-[0-9]+')
+          echo "key=$JIRA_KEY" >> $GITHUB_OUTPUT
+          if [ -z "$JIRA_KEY" ]; then
+            echo "Warning: No Jira key found in branch name: ${{ github.head_ref }}"
+          fi
+
+      # Handle PR opened event - Create Jira subtask
+      - name: Create Jira Subtask on PR Open
+        if: github.event.action == 'opened' && steps.jira_key.outputs.key != ''
+        continue-on-error: true
+        env:
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: |
+          python -c "
+          import os
+          os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
+          from jira_integration_script import create_jira_subtask
+          subtask_key = create_jira_subtask(
+            '${{ steps.jira_key.outputs.key }}',
+            'PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}',
+            'PR URL: ${{ github.event.pull_request.html_url }}\nAuthor: ${{ github.event.pull_request.user.login }}\nCreated: ${{ github.event.pull_request.created_at }}'
+          )
+          if subtask_key:
+            print(f'Subtask created: {subtask_key}')
+          "
+
+      # Handle PR synchronize event - Update Jira comment with new commits
+      - name: Update Jira on PR Sync
+        if: github.event.action == 'synchronize' && steps.jira_key.outputs.key != ''
+        continue-on-error: true
+        env:
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: |
+          python -c "
+          import os
+          os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
+          from jira_integration_script import add_comment
+          add_comment(
+            '${{ steps.jira_key.outputs.key }}',
+            'New commits pushed to PR #${{ github.event.pull_request.number }}\nLatest commit: ${{ github.event.pull_request.head.sha }}\nAuthor: ${{ github.event.pull_request.head.user.login }}\nUpdated: ${{ github.event.pull_request.updated_at }}'
+          )
+          print('Comment added to Jira issue')
+          "
+
+      # Handle PR ready for review - Transition to In Review
+      - name: Transition Jira to In Review
+        if: github.event.action == 'ready_for_review' && steps.jira_key.outputs.key != ''
+        continue-on-error: true
+        env:
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: |
+          python -c "
+          import os
+          os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
+          from jira_integration_script import change_issue_status
+          success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'In Review')
+          if success:
+            print('Issue transitioned to In Review')
+          else:
+            print('Warning: Could not transition to In Review (transition may not exist)')
+          "
+
+      # Handle PR closed without merge
+      - name: Handle PR Closed Without Merge
+        if: github.event.action == 'closed' && github.event.pull_request.merged == false && steps.jira_key.outputs.key != ''
+        continue-on-error: true
+        env:
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: |
+          python -c "
+          import os
+          os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
+          from jira_integration_script import add_comment
+          add_comment(
+            '${{ steps.jira_key.outputs.key }}',
+            'PR #${{ github.event.pull_request.number }} closed without merge\nClosed by: ${{ github.event.pull_request.user.login }}\nClosed at: ${{ github.event.pull_request.closed_at }}'
+          )
+          print('Comment added for PR closure')
+          "
+
+      # Handle PR merge - Transition to Merged
+      - name: Handle PR Merge
+        if: github.event.action == 'closed' && github.event.pull_request.merged == true && steps.jira_key.outputs.key != ''
+        continue-on-error: true
+        env:
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: |
+          python -c "
+          import os
+          os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
+          from jira_integration_script import add_comment, change_issue_status
+          add_comment(
+            '${{ steps.jira_key.outputs.key }}',
+            'PR #${{ github.event.pull_request.number }} merged to ${{ github.event.pull_request.base.ref }}\nMerge commit: ${{ github.event.pull_request.merge_commit_sha }}\nMerged by: ${{ github.event.pull_request.merged_by.login }}\nMerged at: ${{ github.event.pull_request.closed_at }}'
+          )
+          success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'Merged')
+          if success:
+            print('Issue transitioned to Merged')
+          else:
+            print('Warning: Could not transition to Merged (transition may not exist)')
+          "

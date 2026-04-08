@@ -11,6 +11,8 @@ import requests
 import json
 import sys
 import os
+import time
+from datetime import datetime
 
 # Configuration - Use environment variables for security
 JIRA_URL = "https://cmext.ahrq.gov/jira"
@@ -146,6 +148,122 @@ def change_issue_status(issue_key, transition_name):
         print(f"Failed to transition issue. Status code: {response.status_code}")
         print(response.text)
         return False
+
+def create_jira_subtask(parent_key, summary, description):
+    """Creates a Jira subtask linked to a parent issue.
+    
+    Args:
+        parent_key (str): Parent issue key (e.g., 'AQD-1234')
+        summary (str): Subtask summary/title
+        description (str): Subtask description
+    
+    Returns:
+        str: Subtask key on success, None on failure
+    """
+    timestamp = datetime.now().isoformat()
+    print(f"[{timestamp}] Creating Jira subtask for parent: {parent_key}")
+    
+    url = f"{JIRA_URL}/rest/api/2/issue"
+    
+    headers = {
+        "Authorization": f"Bearer {JIRA_TOKEN}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    
+    # Extract project key from parent_key (e.g., "AQD" from "AQD-1234")
+    project_key = parent_key.split('-')[0]
+    
+    payload = {
+        "fields": {
+            "project": {"key": project_key},
+            "parent": {"key": parent_key},
+            "summary": summary,
+            "description": description,
+            "issuetype": {"name": "Sub-task"}
+        }
+    }
+    
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    
+    if response.status_code == 201:
+        subtask_key = response.json()['key']
+        print(f"[{timestamp}] Successfully created subtask: {subtask_key}")
+        return subtask_key
+    else:
+        print(f"[{timestamp}] Failed to create subtask. Status code: {response.status_code}")
+        print(f"Response: {response.text}")
+        return None
+
+def link_jira_issues(issue_key1, issue_key2, link_type="relates to"):
+    """Links two Jira issues together.
+    
+    Args:
+        issue_key1 (str): First issue key (e.g., 'AQD-1234')
+        issue_key2 (str): Second issue key (e.g., 'AQD-1235')
+        link_type (str): Link type (e.g., 'relates to', 'blocks', 'is blocked by')
+    
+    Returns:
+        bool: True on success, False on failure
+    """
+    timestamp = datetime.now().isoformat()
+    print(f"[{timestamp}] Linking issues: {issue_key1} {link_type} {issue_key2}")
+    
+    url = f"{JIRA_URL}/rest/api/2/issueLink"
+    
+    headers = {
+        "Authorization": f"Bearer {JIRA_TOKEN}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    
+    payload = {
+        "type": {"name": link_type},
+        "inwardIssue": {"key": issue_key1},
+        "outwardIssue": {"key": issue_key2}
+    }
+    
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    
+    if response.status_code == 201:
+        print(f"[{timestamp}] Successfully linked issues")
+        return True
+    else:
+        print(f"[{timestamp}] Failed to link issues. Status code: {response.status_code}")
+        print(f"Response: {response.text}")
+        return False
+
+def retry_api_call(func, max_retries=3, backoff_factor=2):
+    """Retry wrapper for Jira API calls with exponential backoff.
+    
+    Args:
+        func (callable): Function to retry
+        max_retries (int): Maximum number of retry attempts
+        backoff_factor (int): Exponential backoff multiplier
+    
+    Returns:
+        Any: Result of func() on success, None on failure after max retries
+    """
+    timestamp = datetime.now().isoformat()
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"[{timestamp}] Attempt {attempt + 1}/{max_retries}")
+            return func()
+        except requests.exceptions.RequestException as e:
+            if attempt == max_retries - 1:
+                print(f"[{timestamp}] Failed after {max_retries} attempts: {e}")
+                return None
+            wait_time = backoff_factor ** attempt
+            print(f"[{timestamp}] Attempt {attempt + 1} failed. Retrying in {wait_time}s...")
+            time.sleep(wait_time)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"[{timestamp}] Unexpected error after {max_retries} attempts: {e}")
+                return None
+            wait_time = backoff_factor ** attempt
+            print(f"[{timestamp}] Unexpected error. Retrying in {wait_time}s...")
+            time.sleep(wait_time)
 
 if __name__ == "__main__":
     # Example usage for testing
