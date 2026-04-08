@@ -11,7 +11,7 @@ MEMORY_BANK_INDEX="$MEMORY_DIR/MEMORY_BANK_INDEX.md"
 SESSION_LOG="$MEMORY_DIR/SESSION_LOG.md"
 AUTO_SYNC_SCRIPT="$PROJECT_DIR/.roo/auto-sync-memory.sh"
 DOCS_DIR="$PROJECT_DIR/docs"
-CONTEXT_BUNDLER="$HOME_DIR/Documents/Roo_Memory/core/scripts/context_bundler.py"
+CONTEXT_BUNDLER="$HOME_DIR/Documents/Roo_Memory/scripts/context_bundler.py"
 
 # Only run if memory directory exists
 if [ ! -d "$MEMORY_DIR" ]; then
