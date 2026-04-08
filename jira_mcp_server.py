@@ -169,13 +169,15 @@ def verify_access():
         print(f"Authenticated as: {user}", file=sys.stderr)
 
         # Test 2: Project check (ADO & AQD)
+        all_projects_accessible = True
         for pk in ["ADO", "AQD"]:
             p_res = requests.get(f"{JIRA_URL}/rest/api/2/project/{pk}", headers=get_headers())
             if p_res.status_code == 200:
                 print(f"Access to {pk}: OK", file=sys.stderr)
             else:
                 print(f"Access to {pk}: FAILED ({p_res.status_code})", file=sys.stderr)
-        return True
+                all_projects_accessible = False
+        return all_projects_accessible
     except Exception as e:
         print(f"Connection error during startup: {e}", file=sys.stderr)
         return False
