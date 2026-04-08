@@ -25,14 +25,14 @@ This project automates the lifecycle between GitHub and a self-hosted Jira insta
 * **GitHub Secrets:** JIRA\_TOKEN (The PAT).  
 * **Branch Naming:** feature/PROJECT-ID (e.g., feature/AQD-1234).  
 * **Automation Flow:**  
-  1. GitHub Issue Opened \-\> jira\_automation.yml \-\> create\_ticket.py \-\> New Jira Task.  
+  1. GitHub Issue Opened \-\> .github/workflows/jira-sync.yml \-\> jira\_integration\_script.py \-\> New Jira Task.  
   2. GitHub Push \-\> Extract Key from Branch \-\> Add comment to Jira ticket.  
-  3. Manual/Auto Query \-\> create\_ticket.py \-\> Retrieve issue details for context-aware coding.
+  3. Manual/Auto Query \-\> jira\_integration\_script.py \-\> Retrieve issue details for context-aware coding.
 
 ## **📜 Key Files**
 
-* create\_ticket.py: Core API client for Jira REST v2 (Supports: Create, Comment, Get Details).  
-* jira\_automation.yml: CI/CD pipeline orchestration.  
+* jira\_integration\_script.py: Core API client for Jira REST v2 (Supports: Create, Comment, Get Details).  
+* .github/workflows/jira-sync.yml: CI/CD pipeline orchestration.  
 * ./.ai-memory/: Ephemeral session memory for agent handoffs.
 
 ## **🚦 Operational Constraints (DSI)**
