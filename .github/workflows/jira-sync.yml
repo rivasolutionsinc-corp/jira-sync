@@ -1,0 +1,63 @@
+name: Jira Workflow Integration
+on:
+  issues:
+    types: [opened]
+  push:
+    branches:
+      - 'feature/**'
+
+jobs:
+  sync-to-jira:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: pip install requests python-dotenv
+
+      # Step to create a Jira ticket when a GitHub issue is opened
+      - name: Create Jira Ticket on Issue
+        if: github.event_name == 'issues'
+        env:
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: |
+          python -c "
+          import os
+          os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
+          from jira_integration_script import create_jira_issue, get_issue_details, change_issue_status
+          issue_key = create_jira_issue('AQD', 'GH Issue: ${{ github.event.issue.title }}', 'Description: ${{ github.event.issue.html_url }}\n\n${{ github.event.issue.body }}')
+          if issue_key:
+              details = get_issue_details(issue_key)
+              print(f'Issue created: {issue_key}')
+              print(f'Status: {details[\"status\"]}')
+              # Optionally transition to 'Start Progress' on creation
+              # change_issue_status(issue_key, 'Start Progress')
+          "
+
+      # Step to add a comment to Jira when code is pushed to a feature branch
+      - name: Comment on Jira on Push
+        if: github.event_name == 'push'
+        env:
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: |
+          # Extract Jira Key from branch name (e.g., feature/AQD-1234 -> AQD-1234)
+          JIRA_KEY=$(echo "${{ github.ref }}" | grep -oE '[A-Z]+-[0-9]+')
+          if [ ! -z "$JIRA_KEY" ]; then
+            python -c "
+            import os
+            os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
+            from jira_integration_script import add_comment, get_issue_details, change_issue_status
+            add_comment('$JIRA_KEY', 'New code pushed to GitHub branch: ${{ github.ref }}\nCommit: ${{ github.sha }}')
+            details = get_issue_details('$JIRA_KEY')
+            print(f'Comment added to $JIRA_KEY')
+            print(f'Current status: {details[\"status\"]}')
+            # Optionally transition to 'Start Progress' on push
+            # change_issue_status('$JIRA_KEY', 'Start Progress')
+            "
+          fi

@@ -1,0 +1,117 @@
+name: Verify Jira Access
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * MON'  # Run every Monday at 9 AM UTC
+
+jobs:
+  verify-jira-access:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: pip install requests python-dotenv
+
+      - name: Verify Jira Authentication
+        env:
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: |
+          python -c "
+          import os
+          import requests
+          
+          JIRA_URL = 'https://cmext.ahrq.gov/jira'
+          JIRA_TOKEN = os.getenv('JIRA_TOKEN')
+          
+          if not JIRA_TOKEN:
+              print('ERROR: JIRA_TOKEN secret is not set')
+              exit(1)
+          
+          headers = {
+              'Authorization': f'Bearer {JIRA_TOKEN}',
+              'Content-Type': 'application/json',
+          }
+          
+          # Test 1: Verify authentication by getting current user
+          print('Test 1: Verifying authentication...')
+          response = requests.get(f'{JIRA_URL}/rest/api/2/myself', headers=headers)
+          
+          if response.status_code == 200:
+              user_data = response.json()
+              print(f'✓ Authentication successful')
+              print(f'  User: {user_data.get(\"displayName\")}')
+              print(f'  Email: {user_data.get(\"emailAddress\")}')
+          else:
+              print(f'✗ Authentication failed: {response.status_code}')
+              print(response.text)
+              exit(1)
+          
+          # Test 2: Verify access to ADO project
+          print('\nTest 2: Verifying ADO project access...')
+          response = requests.get(f'{JIRA_URL}/rest/api/2/project/ADO', headers=headers)
+          
+          if response.status_code == 200:
+              project_data = response.json()
+              print(f'✓ ADO project access successful')
+              print(f'  Project: {project_data.get(\"name\")}')
+              print(f'  Key: {project_data.get(\"key\")}')
+          else:
+              print(f'✗ ADO project access failed: {response.status_code}')
+              print(response.text)
+              exit(1)
+          
+          # Test 3: Verify access to AQD project
+          print('\nTest 3: Verifying AQD project access...')
+          response = requests.get(f'{JIRA_URL}/rest/api/2/project/AQD', headers=headers)
+          
+          if response.status_code == 200:
+              project_data = response.json()
+              print(f'✓ AQD project access successful')
+              print(f'  Project: {project_data.get(\"name\")}')
+              print(f'  Key: {project_data.get(\"key\")}')
+          else:
+              print(f'✗ AQD project access failed: {response.status_code}')
+              print(response.text)
+              exit(1)
+          
+          # Test 4: Verify recent issues in ADO project
+          print('\nTest 4: Verifying issue search capability...')
+          response = requests.get(f'{JIRA_URL}/rest/api/2/search?jql=project=ADO&maxResults=1', headers=headers)
+          
+          if response.status_code == 200:
+              search_data = response.json()
+              total_issues = search_data.get('total', 0)
+              print(f'✓ Issue search successful')
+              print(f'  Total issues in ADO: {total_issues}')
+              if search_data.get('issues'):
+                  latest_issue = search_data['issues'][0]
+                  print(f'  Latest issue: {latest_issue.get(\"key\")} - {latest_issue.get(\"fields\", {}).get(\"summary\")}')
+          else:
+              print(f'✗ Issue search failed: {response.status_code}')
+              print(response.text)
+              exit(1)
+          
+          print('\n✓ All Jira access verification tests passed!')
+          "
+
+      - name: Report Status
+        if: success()
+        run: echo "✓ Jira access verification completed successfully"
+
+      - name: Report Failure
+        if: failure()
+        run: |
+          echo "✗ Jira access verification failed"
+          echo "Please check:"
+          echo "  1. JIRA_TOKEN secret is set in GitHub repository settings"
+          echo "  2. The token has not expired"
+          echo "  3. The Jira instance is accessible"
+          exit 1
