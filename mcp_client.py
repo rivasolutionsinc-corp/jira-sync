@@ -271,5 +271,23 @@ class AtlassianMCPClient:
             return False
 
 
+_atlassian_mcp: Optional[AtlassianMCPClient] = None
+
+
+def get_atlassian_mcp() -> AtlassianMCPClient:
+    """Return a lazily initialized global Atlassian MCP client."""
+    global _atlassian_mcp
+    if _atlassian_mcp is None:
+        _atlassian_mcp = AtlassianMCPClient()
+    return _atlassian_mcp
+
+
+class _LazyAtlassianMCPClient:
+    """Proxy that defers AtlassianMCPClient construction until first use."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_atlassian_mcp(), name)
+
+
 # Global instance for backward compatibility
-atlassian_mcp = AtlassianMCPClient()
+atlassian_mcp = _LazyAtlassianMCPClient()
