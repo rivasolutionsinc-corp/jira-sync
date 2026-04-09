@@ -53,7 +53,7 @@ jobs:
           
           try:
               result = subprocess.run(
-                  ["docker", "compose", "-f", "/Users/dietrichgottfriedschmidt/apps/jira-sync/docker-compose.yml", "run", "--rm", "-T", "mcp-atlassian"],
+                  ["docker", "compose", "-f", "docker-compose.yml", "run", "--rm", "-T", "mcp-atlassian"],
                   input=json.dumps(request).encode(),
                   capture_output=True,
                   timeout=10
@@ -101,7 +101,7 @@ jobs:
           
           try:
               result = subprocess.run(
-                  ["docker", "compose", "-f", "/Users/dietrichgottfriedschmidt/apps/jira-sync/docker-compose.yml", "run", "--rm", "-T", "mcp-atlassian"],
+                  ["docker", "compose", "-f", "docker-compose.yml", "run", "--rm", "-T", "mcp-atlassian"],
                   input=json.dumps(request).encode(),
                   capture_output=True,
                   timeout=10
@@ -153,7 +153,7 @@ jobs:
           
           try:
               result = subprocess.run(
-                  ["docker", "compose", "-f", "/Users/dietrichgottfriedschmidt/apps/jira-sync/docker-compose.yml", "run", "--rm", "-T", "mcp-atlassian"],
+                  ["docker", "compose", "-f", "docker-compose.yml", "run", "--rm", "-T", "mcp-atlassian"],
                   input=json.dumps(request).encode(),
                   capture_output=True,
                   timeout=10
