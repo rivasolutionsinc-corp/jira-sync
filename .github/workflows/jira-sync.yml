@@ -11,10 +11,12 @@ jobs:
 
     steps:
       - name: Start MCP Atlassian Server
+        env:
+          JIRA_PAT: ${{ secrets.AHRQ_JIRA_PAT }}
         run: |
           docker run -d --name mcp-atlassian \
             -e JIRA_URL="https://cmext.ahrq.gov/jira" \
-            -e JIRA_PERSONAL_TOKEN="${{ secrets.AHRQ_JIRA_PAT }}" \
+            -e JIRA_PERSONAL_TOKEN="$JIRA_PAT" \
             -p 8080:8080 \
             ghcr.io/sooperset/mcp-atlassian:latest \
             --transport streamable-http --port 8080 --path /mcp --stateless
