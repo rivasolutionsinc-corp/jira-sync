@@ -32,6 +32,7 @@ jobs:
             echo "Attempt $i/30: Testing http://localhost:8080/mcp"
             if curl -s -X POST http://localhost:8080/mcp \
               -H "Content-Type: application/json" \
+              -H "Accept: application/json, text/event-stream" \
               -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' 2>&1 | grep -q "jsonrpc"; then
               echo "✓ MCP service is ready"
               exit 0
@@ -50,6 +51,7 @@ jobs:
         run: |
           curl -X POST http://localhost:8080/mcp \
             -H "Content-Type: application/json" \
+            -H "Accept: application/json, text/event-stream" \
             -d '{
               "jsonrpc": "2.0",
               "method": "tools/call",
@@ -73,6 +75,7 @@ jobs:
           if [ ! -z "$JIRA_KEY" ]; then
             curl -X POST http://localhost:8080/mcp \
               -H "Content-Type: application/json" \
+              -H "Accept: application/json, text/event-stream" \
               -d '{
                 "jsonrpc": "2.0",
                 "method": "tools/call",
