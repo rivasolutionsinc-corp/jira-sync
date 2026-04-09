@@ -14,18 +14,15 @@ jobs:
         run: |
           docker run -d --name mcp-atlassian \
             -e JIRA_URL="https://cmext.ahrq.gov/jira" \
-            -e JIRA_PAT="${{ secrets.AHRQ_JIRA_PAT }}" \
+            -e JIRA_PERSONAL_TOKEN="${{ secrets.AHRQ_JIRA_PAT }}" \
             -p 8080:8080 \
             ghcr.io/sooperset/mcp-atlassian:latest \
-            --transport streamable-http --port 8080 --path /mcp
+            --transport streamable-http --port 8080 --path /mcp --stateless
 
       - name: Wait for MCP Service
         run: |
           echo "Checking container status..."
           docker ps -a | grep mcp-atlassian
-          
-          echo "Checking container logs..."
-          docker logs mcp-atlassian || echo "No logs available"
           
           echo "Waiting for MCP service to be ready..."
           for i in {1..30}; do
@@ -49,7 +46,7 @@ jobs:
       - name: Create Jira Ticket
         if: github.event_name == 'issues'
         run: |
-          curl -X POST http://localhost:8080/mcp \
+          curl -s -X POST http://localhost:8080/mcp \
             -H "Content-Type: application/json" \
             -H "Accept: application/json, text/event-stream" \
             -d '{
@@ -73,7 +70,7 @@ jobs:
           # Extract Jira key from PR branch name
           JIRA_KEY=$(echo "${{ github.head_ref }}" | grep -oE '[A-Z]+-[0-9]+' || true)
           if [ ! -z "$JIRA_KEY" ]; then
-            curl -X POST http://localhost:8080/mcp \
+            curl -s -X POST http://localhost:8080/mcp \
               -H "Content-Type: application/json" \
               -H "Accept: application/json, text/event-stream" \
               -d '{
