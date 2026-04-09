@@ -1,0 +1,30 @@
+name: Test Published Docker Image
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * MON'  # Weekly test on Mondays at 9 AM UTC
+
+jobs:
+  test-published-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test published Docker image
+        run: |
+          docker run --rm \
+            -e JIRA_URL="${{ secrets.JIRA_URL }}" \
+            -e JIRA_TOKEN="${{ secrets.JIRA_TOKEN }}" \
+            -e PROJECT_KEY="CLOUD" \
+            -e EVENT_NAME="pull_request" \
+            -e PR_BRANCH="test-branch" \
+            -e PR_URL="https://github.com/rivasolutionsinc-corp/jira-sync/pull/test" \
+            ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest \
+            python jira_integration_script.py
+
+      - name: Test image pull and execution
+        run: |
+          echo "✓ Published Docker image successfully pulled and executed"
+          echo "Image: ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest"
