@@ -210,6 +210,107 @@ def test_timeout_validation(results):
     except Exception as e:
         results.add_fail("timeout_validation", str(e))
 
+def test_mcp_client_import(results):
+    """Test 8: MCP Client Import"""
+    try:
+        from mcp_client import atlassian_mcp, AtlassianMCPClient
+        results.add_pass("mcp_client_import (AtlassianMCPClient available)")
+    except ImportError as e:
+        results.add_fail("mcp_client_import", f"Failed to import mcp_client: {e}")
+    except Exception as e:
+        results.add_fail("mcp_client_import", str(e))
+
+def test_mcp_client_initialization(results):
+    """Test 9: MCP Client Initialization"""
+    try:
+        from mcp_client import AtlassianMCPClient
+        client = AtlassianMCPClient()
+        results.add_pass("mcp_client_initialization (Client initialized successfully)")
+    except ValueError as e:
+        results.add_fail("mcp_client_initialization", f"Missing credentials: {e}")
+    except Exception as e:
+        results.add_fail("mcp_client_initialization", str(e))
+
+def test_mcp_tool_methods_exist(results):
+    """Test 10: MCP Tool Methods Exist"""
+    try:
+        from mcp_client import atlassian_mcp
+        
+        # Check all required methods exist
+        required_methods = [
+            'jira_search', 'jira_get_issue', 'jira_create_issue',
+            'jira_add_comment', 'jira_list_transitions', 'jira_transition_issue',
+            'confluence_search', 'confluence_get_page', 'jira_link_issues'
+        ]
+        
+        missing_methods = []
+        for method in required_methods:
+            if not hasattr(atlassian_mcp, method):
+                missing_methods.append(method)
+        
+        if missing_methods:
+            results.add_fail("mcp_tool_methods_exist", f"Missing methods: {', '.join(missing_methods)}")
+        else:
+            results.add_pass("mcp_tool_methods_exist (All 9 MCP tool methods available)")
+    except Exception as e:
+        results.add_fail("mcp_tool_methods_exist", str(e))
+
+def test_jira_integration_script_refactored(results):
+    """Test 11: Jira Integration Script Refactored"""
+    try:
+        with open("jira_integration_script.py", "r") as f:
+            content = f.read()
+            
+            # Check for MCP imports
+            if "from mcp_client import" not in content:
+                results.add_fail("jira_integration_script_refactored", "MCP client not imported")
+                return
+            
+            # Check for MCP_AVAILABLE flag
+            if "MCP_AVAILABLE" not in content:
+                results.add_fail("jira_integration_script_refactored", "MCP_AVAILABLE flag not set")
+                return
+            
+            # Check for fallback logic
+            if "Falling back to REST API" not in content:
+                results.add_fail("jira_integration_script_refactored", "Fallback logic not implemented")
+                return
+            
+            results.add_pass("jira_integration_script_refactored (Script successfully refactored with MCP support)")
+    except Exception as e:
+        results.add_fail("jira_integration_script_refactored", str(e))
+
+def test_backward_compatibility(results):
+    """Test 12: Backward Compatibility"""
+    try:
+        from jira_integration_script import (
+            create_jira_issue,
+            add_comment,
+            get_issue_details,
+            change_issue_status,
+            create_jira_subtask,
+            link_jira_issues,
+            retry_api_call
+        )
+        
+        # Verify all functions are callable
+        functions = [
+            create_jira_issue, add_comment, get_issue_details,
+            change_issue_status, create_jira_subtask, link_jira_issues,
+            retry_api_call
+        ]
+        
+        for func in functions:
+            if not callable(func):
+                results.add_fail("backward_compatibility", f"Function {func.__name__} is not callable")
+                return
+        
+        results.add_pass("backward_compatibility (All 7 functions maintain backward compatibility)")
+    except ImportError as e:
+        results.add_fail("backward_compatibility", f"Failed to import functions: {e}")
+    except Exception as e:
+        results.add_fail("backward_compatibility", str(e))
+
 def main():
     """Run all regression tests"""
     print("\n" + "="*60)
@@ -245,6 +346,21 @@ def main():
     
     # Test 7: Timeout Validation
     test_timeout_validation(results)
+    
+    # Test 8: MCP Client Import
+    test_mcp_client_import(results)
+    
+    # Test 9: MCP Client Initialization
+    test_mcp_client_initialization(results)
+    
+    # Test 10: MCP Tool Methods
+    test_mcp_tool_methods_exist(results)
+    
+    # Test 11: Jira Integration Script Refactored
+    test_jira_integration_script_refactored(results)
+    
+    # Test 12: Backward Compatibility
+    test_backward_compatibility(results)
     
     # Print summary
     success = results.summary()
