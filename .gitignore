@@ -43,5 +43,3 @@ Thumbs.db
 
 # Project specific
 .ai-memory/
-.ai-memory/
-.github/actions/jira-sync/jira_integration_script.py
