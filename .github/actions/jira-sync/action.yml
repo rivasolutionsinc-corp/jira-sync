@@ -1,13 +1,16 @@
 name: 'Jira Sync'
-description: 'Sync GitHub Issues and PRs to a self-hosted Jira Data Center instance via REST API'
+description: 'Sync GitHub Issues and PRs to a self-hosted Jira Data Center instance via Atlassian MCP'
 author: 'AHRQ DevOps'
 
 inputs:
   jira-url:
     description: 'Base URL of the Jira instance (e.g. https://cmext.ahrq.gov/jira)'
     required: true
-  jira-token:
-    description: 'Jira Personal Access Token (PAT)'
+  jira-username:
+    description: 'Jira username or email'
+    required: true
+  jira-api-token:
+    description: 'Jira API Token'
     required: true
   project-key:
     description: 'Jira project key (e.g. CLOUD)'
@@ -31,6 +34,10 @@ inputs:
     description: 'PR HTML URL (for pull_request event)'
     required: false
     default: ''
+  issue-type:
+    description: 'Jira Issue Type (e.g., Task, Story, Bug)'
+    required: false
+    default: 'Task'
 
 outputs:
   jira-key:
@@ -38,13 +45,8 @@ outputs:
 
 runs:
   using: 'docker'
-  image: 'Dockerfile'
+  image: 'docker://ghcr.io/sooperset/mcp-atlassian:latest'
   env:
     JIRA_URL: ${{ inputs.jira-url }}
-    JIRA_TOKEN: ${{ inputs.jira-token }}
-    PROJECT_KEY: ${{ inputs.project-key }}
-    EVENT_NAME: ${{ inputs.event-name }}
-    ISSUE_TITLE: ${{ inputs.issue-title }}
-    ISSUE_URL: ${{ inputs.issue-url }}
-    PR_BRANCH: ${{ inputs.pr-branch }}
-    PR_URL: ${{ inputs.pr-url }}
+    JIRA_USERNAME: ${{ inputs.jira-username }}
+    JIRA_API_TOKEN: ${{ inputs.jira-api-token }}
