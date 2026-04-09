@@ -11,6 +11,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          clean: true
+          ref: ${{ github.head_ref }}
+
+      - name: Prepare action directory
+        run: |
+          if [ ! -f jira_integration_script.py ]; then
+            echo "ERROR: jira_integration_script.py not found in workspace"
+            ls -la
+            exit 1
+          fi
+          cp jira_integration_script.py .github/actions/jira-sync/
 
       - name: Run Jira Sync Action
         uses: ./.github/actions/jira-sync
