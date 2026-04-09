@@ -17,7 +17,10 @@ from datetime import datetime
 
 # Configuration - Use environment variables for security
 JIRA_URL = os.getenv("JIRA_URL", "https://cmext.ahrq.gov/jira")
-JIRA_TOKEN = os.getenv("JIRA_TOKEN", os.getenv("JIRA_PAT", "YOUR_PAT_HERE"))
+JIRA_TOKEN = os.getenv(
+    "JIRA_TOKEN",
+    os.getenv("JIRA_API_TOKEN", os.getenv("JIRA_PAT", "YOUR_PAT_HERE"))
+)
 
 # Import MCP client
 try:
