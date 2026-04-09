@@ -1,250 +1,193 @@
 # Jira & GitHub Workflow Automation
 
-Automated integration between GitHub and self-hosted Jira (cmext.ahrq.gov/jira) for the AHRQ Drupal ecosystem.
+Automated integration between GitHub and self-hosted Jira (cmext.ahrq.gov/jira) for the AHRQ Drupal ecosystem using MCP (Model Context Protocol) Atlassian container.
 
 ## Overview
 
-This project automates the lifecycle between GitHub and Jira, enabling seamless synchronization of issues, pull requests, and code changes. It enforces a multi-agent architecture where planning, coding, and DevOps are strictly separated.
+This project automates the lifecycle between GitHub and Jira, enabling seamless synchronization of issues and pull requests. It uses a containerized MCP Atlassian server for reliable, stateless JSON-RPC communication with Jira.
+
+**Current Status:** ✅ Production-Ready (CLOUD-1927 E2E tested)
 
 ## Features
 
-### Phase 0: Basic Integration (Existing)
-- **GitHub Issue Opened** → Automatically creates a Jira Task
-- **GitHub Push to Feature Branch** → Adds comment to linked Jira issue with commit details
+### Current Implementation (Phase 1)
+- **GitHub Issue Opened** → Automatically creates a Jira Task in CLOUD project
+- **GitHub PR Opened/Synchronized** → Automatically adds comments to linked Jira issue with PR details
+- **Jira Key Extraction** → Automatically extracts Jira key from branch name (e.g., `feature/CLOUD-1927`)
 
-### Phase 1: Advanced GitHub Actions CI/CD Automation (NEW)
+### Technology Stack
+- **Container:** `ghcr.io/sooperset/mcp-atlassian:latest`
+- **Transport:** Streamable HTTP with stateless mode
+- **Protocol:** JSON-RPC 2.0
+- **Authentication:** Jira Personal Access Token
+- **CI/CD:** GitHub Actions
 
-#### Pull Request Lifecycle Automation
-- **PR Opened** → Creates Jira subtask linked to parent issue
-- **PR Synchronize** (new commits) → Updates Jira comment with latest commit SHA and author
-- **PR Ready for Review** → Transitions Jira issue to "In Review" status
-- **PR Closed (without merge)** → Adds comment indicating PR was closed without merging
-
-#### Pull Request Merge Automation
-- **PR Merged** → Transitions Jira issue to "Merged" status
-- **PR Merged** → Adds comment with merge commit SHA, merge author, and timestamp
-
-## Architecture
-
-### Tech Stack
-- **CMS:** Drupal (AHRQ Government instances)
-- **Infrastructure:** Self-hosted Jira (Apache/Tomcat) + GitHub Actions
-- **Automation:** Python-based Jira REST API v2 integrations (Bearer token authentication)
-- **CI/CD:** GitHub Actions workflows
-
-### Multi-Agent System
-- **Orchestrator:** High-level planning and architecture
-- **Documentation Writer:** Standardizes logs and ADRs in `./.ai-memory/`
-- **Code (Drupal Builder):** Implements logic, hooks, and services
-- **Git Ops:** Manages branching and commits
-
-## Setup & Configuration
+## Quick Start
 
 ### Prerequisites
 1. **GitHub Repository Secrets:**
-   - `JIRA_TOKEN`: Personal Access Token for Jira API authentication (Bearer token format)
-   - `JIRA_PROJECT_KEY` (optional): Jira project key for GitHub issue creation (defaults to `AQD` if not set)
+   - `JIRA_TOKEN`: Jira Personal Access Token (Server/Data Center)
+   - `JIRA_PROJECT_KEY` (optional): Jira project key (defaults to `CLOUD`)
 
 2. **Jira Configuration:**
-   - Project key (e.g., `AQD`)
-   - Available transitions: `In Review`, `Merged`, `Start Progress`, etc.
-   - Subtask issue type must be enabled
+   - Project key (e.g., `CLOUD`)
+   - Personal Access Token with API access
+   - Sufficient permissions to create issues and add comments
 
 3. **GitHub Actions:**
-   - Python 3.x available on runners
-   - `requests` library installed (via `pip install requests`)
+   - Workflow file: `.github/workflows/jira-sync.yml`
+   - Triggers on: issues opened, PR opened/synchronized
 
 ### Branch Naming Convention
 
 All feature branches **must** follow this naming pattern:
 
 ```
-feature/PROJECT-ID-ISSUE-NUMBER
+feature/PROJECT-KEY-ISSUE-NUMBER
 ```
 
 **Examples:**
-- `feature/AQD-1234` - Creates/links to Jira issue AQD-1234
-- `feature/EHC-5678` - Creates/links to Jira issue EHC-5678
+- `feature/CLOUD-1927` - Links to Jira issue CLOUD-1927
+- `feature/AQD-1234` - Links to Jira issue AQD-1234
 
 **Important:** Branches not matching this pattern will not trigger Jira automation.
 
-### Multi-Project Support
+## Architecture
 
-The system supports multiple Jira projects:
+### System Components
 
-**For GitHub Issues:**
-- Set `JIRA_PROJECT_KEY` secret in GitHub repository settings
-- If not set, defaults to `AQD`
-- Example: Set `JIRA_PROJECT_KEY=EHC` to create issues in the EHC project
+```
+GitHub Repository
+    ↓
+GitHub Actions Workflow (.github/workflows/jira-sync.yml)
+    ↓
+MCP Atlassian Container (ghcr.io/sooperset/mcp-atlassian:latest)
+    ↓
+Jira Server (cmext.ahrq.gov/jira)
+```
 
-**For Pull Requests & Push Events:**
-- Automatically extracts project key from branch name
-- Example: `feature/EHC-5678` automatically uses the `EHC` project
-- No configuration needed - fully dynamic
+### Workflow Execution Flow
 
-## Workflow Files
+1. **Event Trigger** - GitHub issue opened or PR opened/synchronized
+2. **Container Start** - MCP Atlassian container starts with streamable-http transport
+3. **Health Check** - Validates service readiness with JSON-RPC tools/list call
+4. **Jira Operation** - Calls appropriate Jira tool (jira_create_issue or jira_add_comment)
+5. **Result** - Issue created or comment added to Jira
+
+### Key Configuration
+
+**Transport:** `streamable-http --port 8080 --path /mcp --stateless`
+- Stateless mode eliminates session management complexity
+- Suitable for ephemeral GitHub Actions runners
+- Requires Accept header: `application/json, text/event-stream`
+
+**Authentication:** `JIRA_PERSONAL_TOKEN` environment variable
+- Maps to `--jira-personal-token` flag
+- Correct for Jira Server/Data Center (not Cloud)
+
+## Workflow File
 
 ### `.github/workflows/jira-sync.yml`
 
-Main workflow file that orchestrates all Jira integrations:
+Main workflow file that orchestrates Jira integrations:
 
 **Triggers:**
 - `issues.opened` - GitHub issue created
-- `push` to `feature/**` branches - Code pushed
-- `pull_request` events:
-  - `opened` - PR created
-  - `synchronize` - New commits pushed to PR
-  - `ready_for_review` - PR marked as ready for review
-  - `closed` - PR closed (with or without merge)
+- `pull_request.opened` - PR created
+- `pull_request.synchronize` - New commits pushed to PR
 
 **Jobs:**
-1. `sync-to-jira` - Handles GitHub issues and push events
-2. `pr-lifecycle` - Handles PR lifecycle and merge automation
+1. `sync-to-jira` - Handles GitHub issues and PRs
 
-## Python Integration Script
+**Steps:**
+1. Start MCP Atlassian container
+2. Wait for service readiness (health check)
+3. Create Jira ticket (on issue opened)
+4. Add comment to Jira (on PR opened/synchronized)
 
-### `jira_integration_script.py`
+## Setup & Configuration
 
-Core API client for Jira REST v2 integration.
+### Step 1: Create GitHub Secrets
 
-#### Existing Functions
+1. Go to repository → Settings → Secrets and variables → Actions
+2. Create `JIRA_TOKEN`:
+   - Generate Personal Access Token in Jira
+   - Copy token value
+   - Paste into GitHub secret
+3. (Optional) Create `JIRA_PROJECT_KEY`:
+   - Set to your Jira project key (e.g., `CLOUD`)
+   - Defaults to `CLOUD` if not set
 
-- **`create_jira_issue(project_key, summary, description, issue_type="Task")`**
-  - Creates a new Jira issue
-  - Returns: Issue key (e.g., "AQD-1234") on success, None on failure
+### Step 2: Verify Jira Configuration
 
-- **`add_comment(issue_key, comment_body)`**
-  - Adds a comment to an existing Jira issue
-  - Returns: None (prints status to stdout)
+1. Ensure Jira project exists (e.g., `CLOUD`)
+2. Verify Personal Access Token has:
+   - API access permission
+   - Issue creation permission
+   - Comment creation permission
+3. Test token: `curl -H "Authorization: Bearer $TOKEN" https://cmext.ahrq.gov/jira/rest/api/2/myself`
 
-- **`get_issue_details(issue_key)`**
-  - Retrieves details of a Jira issue
-  - Returns: Dictionary with issue metadata (key, summary, status, assignee, etc.)
+### Step 3: Test the Workflow
 
-- **`change_issue_status(issue_key, transition_name)`**
-  - Transitions a Jira issue to a new status
-  - Returns: True on success, False on failure
-
-#### New Functions (Phase 1)
-
-- **`create_jira_subtask(parent_key, summary, description)`**
-  - Creates a Jira subtask linked to a parent issue
-  - Automatically extracts project key from parent_key
-  - Returns: Subtask key (e.g., "AQD-1235") on success, None on failure
-  - **Use Case:** Create PR subtask when PR is opened
-
-- **`link_jira_issues(issue_key1, issue_key2, link_type="relates to")`**
-  - Links two Jira issues together
-  - Supported link types: "relates to", "blocks", "is blocked by", etc.
-  - Returns: True on success, False on failure
-  - **Use Case:** Link PR subtask to deployment issue
-
-- **`retry_api_call(func, max_retries=3, backoff_factor=2)`**
-  - Retry wrapper for Jira API calls with exponential backoff
-  - Handles transient network/API failures gracefully
-  - Backoff timing: 1s, 2s, 4s (exponential)
-  - Returns: Result of func() on success, None on failure after max retries
-  - **Use Case:** Resilience for all API calls
-
-### Logging
-
-All functions include structured logging with timestamps:
-
-```
-[2026-04-08T20:33:10.123456] Creating Jira subtask for parent: AQD-1234
-[2026-04-08T20:33:10.234567] Successfully created subtask: AQD-1235
-```
-
-## Testing
-
-### Unit Tests
-
-Run unit tests for all Jira integration functions:
-
-```bash
-python -m pytest test_jira_integration.py -v
-```
-
-**Test Coverage:**
-- `TestCreateJiraSubtask` - Subtask creation success/failure scenarios
-- `TestLinkJiraIssues` - Issue linking success/failure scenarios
-- `TestRetryApiCall` - Retry logic and exponential backoff
-- `TestExistingFunctions` - Backward compatibility for existing functions
-
-### Integration Testing
-
-1. **Create a test PR:**
+1. Create a feature branch:
    ```bash
-   git checkout -b feature/TEST-9999
-   git push origin feature/TEST-9999
+   git checkout -b feature/CLOUD-1927
+   git push origin feature/CLOUD-1927
    ```
 
-2. **Open a PR on GitHub** from `feature/TEST-9999` to `main`
+2. Open a Pull Request on GitHub
 
-3. **Verify workflow execution:**
-   - Check GitHub Actions workflow logs
-   - Verify Jira subtask created for the PR
-   - Verify Jira comment added with PR details
+3. Check GitHub Actions workflow logs:
+   - Go to Actions tab
+   - Click on workflow run
+   - Verify all steps completed successfully
 
-4. **Test PR lifecycle:**
-   - Mark PR as ready for review → Verify Jira transitions to "In Review"
-   - Merge PR → Verify Jira transitions to "Merged"
-   - Close PR without merge → Verify Jira comment added
-
-### Manual Testing Checklist
-
-- [ ] Push commit to `feature/AQD-1234` branch
-- [ ] Open PR and verify workflow triggers
-- [ ] Verify Jira comment added with commit SHA
-- [ ] Mark PR as ready for review and verify Jira transition
-- [ ] Merge PR and verify Jira transition to "Merged"
-- [ ] Check Jira audit trail for all transitions
+4. Verify in Jira:
+   - Check CLOUD-1927 for new comment
+   - Verify PR URL is in comment
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### 1. "No Jira key found in branch name"
-**Cause:** Branch name doesn't match `feature/PROJECT-ID` pattern
-
-**Solution:** Rename branch to follow naming convention:
-```bash
-git branch -m feature/AQD-1234
-git push origin feature/AQD-1234
-```
-
-#### 2. "Failed to create subtask. Status code: 400"
-**Cause:** Parent issue doesn't exist or project key is invalid
+#### 1. "Jira client not available" Error
+**Cause:** Secret not passed to container or authentication failed
 
 **Solution:**
-- Verify Jira issue exists (e.g., AQD-1234)
-- Verify project key is correct
-- Check Jira API token has permissions
-
-#### 3. "Could not transition to In Review (transition may not exist)"
-**Cause:** Jira workflow doesn't have "In Review" transition
-
-**Solution:**
-- Check Jira project workflow configuration
-- Update workflow step to use correct transition name
-- Common transitions: "Start Progress", "In Progress", "In Review", "Done"
-
-#### 4. "Failed after 3 attempts: Connection error"
-**Cause:** Jira API is unreachable or network timeout
-
-**Solution:**
-- Verify Jira server is online: `https://cmext.ahrq.gov/jira`
-- Check GitHub Actions runner network connectivity
-- Verify `JIRA_TOKEN` secret is set correctly
-- Check Jira API rate limits
-
-#### 5. "401 Unauthorized"
-**Cause:** Invalid or expired `JIRA_TOKEN`
-
-**Solution:**
-- Regenerate Personal Access Token in Jira
-- Update `JIRA_TOKEN` secret in GitHub repository settings
+- Verify `JIRA_TOKEN` secret is set in GitHub
+- Check secret value is correct (no extra spaces)
 - Verify token has API access permissions
+- Check container logs: `docker logs mcp-atlassian`
+
+#### 2. "Not Acceptable: Client must accept both application/json and text/event-stream"
+**Cause:** Missing Accept header in curl request
+
+**Solution:**
+- Verify workflow includes Accept header
+- Header should be: `Accept: application/json, text/event-stream`
+- Already fixed in current workflow
+
+#### 3. "Bad Request: Missing session ID"
+**Cause:** Using stateful transport instead of stateless
+
+**Solution:**
+- Verify `--stateless` flag is in container startup
+- Current workflow uses correct flag
+
+#### 4. Workflow Fails on First Attempt
+**Cause:** Container not ready yet
+
+**Solution:**
+- Workflow includes 3-second initial sleep
+- Health check retries up to 30 times
+- Typical startup time: 8-10 seconds
+
+#### 5. "No Jira key found in branch name"
+**Cause:** Branch name doesn't match `feature/PROJECT-KEY` pattern
+
+**Solution:**
+- Rename branch to follow convention
+- Example: `feature/CLOUD-1927`
 
 ### Debug Logging
 
@@ -253,19 +196,88 @@ Enable verbose logging by checking GitHub Actions workflow logs:
 1. Go to repository → Actions tab
 2. Click on workflow run
 3. Expand job logs to see detailed output
-4. Look for `[TIMESTAMP]` prefixed log messages
+4. Look for:
+   - Container status checks
+   - Health check attempts
+   - Jira API responses
+   - Error messages
 
-### API Response Codes
+### Manual Testing
 
-| Code | Meaning | Action |
-|------|---------|--------|
-| 201 | Created | Success - resource created |
-| 204 | No Content | Success - resource updated |
-| 400 | Bad Request | Check request payload format |
-| 401 | Unauthorized | Check JIRA_TOKEN secret |
-| 403 | Forbidden | Check token permissions |
-| 404 | Not Found | Check issue key exists |
-| 500 | Server Error | Jira server error - retry |
+Test locally with Docker:
+
+```bash
+# Start container
+docker run -d --name mcp-test \
+  -e JIRA_URL="https://cmext.ahrq.gov/jira" \
+  -e JIRA_PERSONAL_TOKEN="your-token" \
+  -p 8080:8080 \
+  ghcr.io/sooperset/mcp-atlassian:latest \
+  --transport streamable-http --port 8080 --path /mcp --stateless
+
+# Test health check
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+
+# Test create issue
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "jira_create_issue",
+      "arguments": {
+        "project_key": "CLOUD",
+        "summary": "Test Issue",
+        "description": "Test from local",
+        "issue_type": "Task"
+      }
+    },
+    "id": 1
+  }'
+
+# Cleanup
+docker stop mcp-test && docker rm mcp-test
+```
+
+## Documentation
+
+Comprehensive documentation is available in `.ai-memory/`:
+
+- **00-DOCUMENTATION-SUMMARY.md** - Quick start guides by role
+- **01-ARCHITECTURE-OVERVIEW.md** - System architecture and design
+- **02-SETUP-AND-CONFIGURATION.md** - Detailed setup instructions
+- **03-WORKFLOW-OPERATION-GUIDE.md** - How the workflow operates
+- **04-TROUBLESHOOTING-GUIDE.md** - Common issues and solutions
+- **05-FUTURE-ENHANCEMENTS.md** - Roadmap and planned features
+
+## Future Enhancements
+
+### Phase 2: Enhanced Automation
+- Automatic issue transitions (In Progress, Done)
+- Custom field updates
+- Subtask creation for PRs
+
+### Phase 3: Bidirectional Sync
+- Jira transitions trigger GitHub actions
+- Webhook support
+- Conflict resolution
+
+### Phase 4: Analytics & Reporting
+- Velocity metrics
+- Cycle time tracking
+- Dashboard integration
+
+### Phase 5: Multi-Repository Support
+- Centralized Jira project
+- Multiple GitHub repositories
+- Cross-repository linking
+
+See [`05-FUTURE-ENHANCEMENTS.md`](.ai-memory/05-FUTURE-ENHANCEMENTS.md) for detailed roadmap.
 
 ## Security & Compliance
 
@@ -275,55 +287,46 @@ Enable verbose logging by checking GitHub Actions workflow logs:
 - Rotate tokens regularly (recommended: quarterly)
 
 ### Branch Validation
-- Branch naming enforced: `feature/PROJECT-ID`
-- Prevents accidental Jira key extraction from invalid branch names
+- Branch naming enforced: `feature/PROJECT-KEY`
+- Prevents accidental Jira key extraction
 
 ### Audit Trail
-- All Jira transitions logged with:
-  - GitHub actor (who triggered the action)
-  - Timestamp (when action occurred)
-  - Commit SHA (what code was involved)
-  - PR number (which PR triggered the action)
+- All Jira operations logged with:
+  - GitHub actor (who triggered)
+  - Timestamp (when)
+  - Commit SHA (what code)
+  - PR number (which PR)
 
 ### Rate Limiting
-- Jira API has rate limits (typically 10 requests/second)
-- Retry logic with exponential backoff prevents rate limit violations
-- Monitor workflow logs for rate limit errors
+- Jira API rate limits: ~10 requests/second
+- Health check includes retry logic with exponential backoff
+- Monitors for rate limit errors
 
 ## Development
 
 ### Adding New Features
 
 1. **Update `.github/workflows/jira-sync.yml`:**
-   - Add new trigger event or job
-   - Call appropriate Python function
+   - Add new trigger event or step
+   - Call appropriate Jira tool
 
-2. **Update `jira_integration_script.py`:**
-   - Add new function or enhance existing function
-   - Include error handling and logging
-   - Use `retry_api_call()` wrapper for resilience
+2. **Test locally:**
+   - Use Docker to test container startup
+   - Test JSON-RPC calls manually
+   - Verify Jira operations
 
-3. **Add unit tests in `test_jira_integration.py`:**
-   - Mock Jira API responses
-   - Test success and failure scenarios
-   - Test error handling
-
-4. **Update `README.md`:**
-   - Document new feature
-   - Add troubleshooting section if needed
-   - Update examples
-
-5. **Create feature branch:**
+3. **Create feature branch:**
    ```bash
-   git checkout -b feature/JIRA-XXXX
+   git checkout -b feature/CLOUD-XXXX
    git commit -am "Add new feature"
-   git push origin feature/JIRA-XXXX
+   git push origin feature/CLOUD-XXXX
    ```
 
-6. **Create pull request and merge after review**
+4. **Create pull request and merge after review**
 
 ## References
 
+- [MCP Atlassian Documentation](https://github.com/sooperset/mcp-atlassian)
 - [Jira REST API v2 Documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v2/)
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
 - [GitHub Webhook Events](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads)
@@ -333,8 +336,9 @@ Enable verbose logging by checking GitHub Actions workflow logs:
 For issues or questions:
 1. Check troubleshooting section above
 2. Review workflow logs in GitHub Actions
-3. Check Jira API response in workflow output
-4. Contact DevOps team
+3. Check container logs: `docker logs mcp-atlassian`
+4. Review comprehensive documentation in `.ai-memory/`
+5. Contact DevOps team
 
 ## License
 
