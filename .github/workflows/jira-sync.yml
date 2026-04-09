@@ -7,8 +7,7 @@ on:
 
 jobs:
   sync-to-jira:
-    # Use 'self-hosted' if your runner is inside the AHRQ network
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     container:
       image: ghcr.io/sooperset/mcp-atlassian:latest
       env:
