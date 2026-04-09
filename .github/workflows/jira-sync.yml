@@ -17,7 +17,7 @@ jobs:
             -e JIRA_PAT="${{ secrets.AHRQ_JIRA_PAT }}" \
             -p 8080:8080 \
             ghcr.io/sooperset/mcp-atlassian:latest \
-            --transport sse --port 8080
+            --transport streamable-http --port 8080 --path /mcp
 
       - name: Wait for MCP Service
         run: |
@@ -27,13 +27,12 @@ jobs:
           echo "Checking container logs..."
           docker logs mcp-atlassian || echo "No logs available"
           
-          echo "Checking network connectivity..."
-          docker exec mcp-atlassian netstat -tlnp 2>/dev/null || echo "netstat not available"
-          
           echo "Waiting for MCP service to be ready..."
           for i in {1..30}; do
-            echo "Attempt $i/30: Testing http://localhost:8080/sse"
-            if curl -v http://localhost:8080/sse 2>&1 | grep -q "200\|Connection established"; then
+            echo "Attempt $i/30: Testing http://localhost:8080/mcp"
+            if curl -s -X POST http://localhost:8080/mcp \
+              -H "Content-Type: application/json" \
+              -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' 2>&1 | grep -q "jsonrpc"; then
               echo "✓ MCP service is ready"
               exit 0
             fi
@@ -49,7 +48,7 @@ jobs:
       - name: Create Jira Ticket
         if: github.event_name == 'issues'
         run: |
-          curl -X POST http://localhost:8080/sse \
+          curl -X POST http://localhost:8080/mcp \
             -H "Content-Type: application/json" \
             -d '{
               "jsonrpc": "2.0",
@@ -72,7 +71,7 @@ jobs:
           # Extract Jira key from PR branch name
           JIRA_KEY=$(echo "${{ github.head_ref }}" | grep -oE '[A-Z]+-[0-9]+' || true)
           if [ ! -z "$JIRA_KEY" ]; then
-            curl -X POST http://localhost:8080/sse \
+            curl -X POST http://localhost:8080/mcp \
               -H "Content-Type: application/json" \
               -d '{
                 "jsonrpc": "2.0",
