@@ -21,6 +21,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare action directory
+        run: cp jira_integration_script.py .github/actions/jira-sync/
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
