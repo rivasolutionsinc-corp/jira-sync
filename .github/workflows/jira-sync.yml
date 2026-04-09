@@ -21,15 +21,29 @@ jobs:
 
       - name: Wait for MCP Service
         run: |
+          echo "Checking container status..."
+          docker ps -a | grep mcp-atlassian
+          
+          echo "Checking container logs..."
+          docker logs mcp-atlassian || echo "No logs available"
+          
+          echo "Checking network connectivity..."
+          docker exec mcp-atlassian netstat -tlnp 2>/dev/null || echo "netstat not available"
+          
+          echo "Waiting for MCP service to be ready..."
           for i in {1..30}; do
-            if curl -s http://localhost:8080/sse > /dev/null 2>&1; then
-              echo "MCP service is ready"
+            echo "Attempt $i/30: Testing http://localhost:8080/sse"
+            if curl -v http://localhost:8080/sse 2>&1 | grep -q "200\|Connection established"; then
+              echo "✓ MCP service is ready"
               exit 0
             fi
-            echo "Waiting for MCP service... ($i/30)"
+            echo "  → Service not ready yet, retrying in 1s..."
             sleep 1
           done
-          echo "MCP service failed to start"
+          
+          echo "✗ MCP service failed to start after 30 attempts"
+          echo "Final container logs:"
+          docker logs mcp-atlassian
           exit 1
 
       - name: Create Jira Ticket
