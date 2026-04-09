@@ -1,13 +1,9 @@
-name: Verify Jira Access (MCP Refactored)
+name: Verify Jira Access
 
 on:
   workflow_dispatch:
   schedule:
     - cron: '0 9 * * MON'  # Run every Monday at 9 AM UTC
-
-env:
-  ATLASSIAN_API_TOKEN: ${{ secrets.JIRA_TOKEN }}
-  ATLASSIAN_DOMAIN: "cmext.ahrq.gov"
 
 jobs:
   verify-jira-access:
@@ -24,166 +20,91 @@ jobs:
       - name: Install Dependencies
         run: pip install requests python-dotenv
 
-      # REPLACE: Direct REST API -> MCP jira_search tool
-      - name: Verify Jira Authentication via MCP
+      - name: Verify Jira Authentication
         env:
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
         run: |
           python3 << 'EOF'
           import os
-          import sys
-          import json
-          import subprocess
-
+          import requests
+          
+          JIRA_URL = 'https://cmext.ahrq.gov/jira'
           JIRA_TOKEN = os.getenv('JIRA_TOKEN')
           
           if not JIRA_TOKEN:
               print('ERROR: JIRA_TOKEN secret is not set')
-              sys.exit(1)
+              exit(1)
           
-          print('Test 1: Verifying Jira authentication via MCP...')
-          
-          # Test MCP tool: search_jira_issues
-          request = {
-              "jsonrpc": "2.0",
-              "id": 1,
-              "method": "search_jira_issues",
-              "params": {"query": "project = ADO ORDER BY created DESC"}
+          headers = {
+              'Authorization': f'Bearer {JIRA_TOKEN}',
+              'Content-Type': 'application/json',
           }
           
-          try:
-              result = subprocess.run(
-                  ["docker", "compose", "-f", "/Users/dietrichgottfriedschmidt/apps/jira-sync/docker-compose.yml", "run", "--rm", "-T", "mcp-atlassian"],
-                  input=json.dumps(request).encode(),
-                  capture_output=True,
-                  timeout=10
-              )
-              
-              if result.returncode == 0:
-                  response = json.loads(result.stdout.decode())
-                  if "result" in response:
-                      print("✓ Authentication successful via MCP")
-                      print(f"  Total issues in ADO: {response['result'].get('total', 0)}")
-                  else:
-                      print("✗ MCP authentication failed")
-                      sys.exit(1)
-              else:
-                  print(f"✗ MCP call failed: {result.stderr.decode()}")
-                  sys.exit(1)
-          except Exception as e:
-              print(f"✗ Error: {e}")
-              sys.exit(1)
+          # Test 1: Verify authentication by getting current user
+          print('Test 1: Verifying authentication...')
+          response = requests.get(f'{JIRA_URL}/rest/api/2/myself', headers=headers)
           
-          print("\n✓ Jira access verification via MCP completed successfully!")
-          EOF
-
-      - name: Verify Project Access (ADO)
-        env:
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-        run: |
-          python3 << 'EOF'
-          import os
-          import sys
-          import json
-          import subprocess
-
-          JIRA_TOKEN = os.getenv('JIRA_TOKEN')
+          if response.status_code == 200:
+              user_data = response.json()
+              print(f'✓ Authentication successful')
+              print(f'  User: {user_data.get("displayName")}')
+              print(f'  Email: {user_data.get("emailAddress")}')
+          else:
+              print(f'✗ Authentication failed: {response.status_code}')
+              print(response.text)
+              exit(1)
           
-          print('Test 2: Verifying ADO project access via MCP...')
+          # Test 2: Verify access to ADO project
+          print('\nTest 2: Verifying ADO project access...')
+          response = requests.get(f'{JIRA_URL}/rest/api/2/project/ADO', headers=headers)
           
-          # Test MCP tool: search_jira_issues for ADO project
-          request = {
-              "jsonrpc": "2.0",
-              "id": 1,
-              "method": "search_jira_issues",
-              "params": {"query": "project = ADO LIMIT 1"}
-          }
+          if response.status_code == 200:
+              project_data = response.json()
+              print(f'✓ ADO project access successful')
+              print(f'  Project: {project_data.get("name")}')
+              print(f'  Key: {project_data.get("key")}')
+          else:
+              print(f'✗ ADO project access failed: {response.status_code}')
+              print(response.text)
+              exit(1)
           
-          try:
-              result = subprocess.run(
-                  ["docker", "compose", "-f", "/Users/dietrichgottfriedschmidt/apps/jira-sync/docker-compose.yml", "run", "--rm", "-T", "mcp-atlassian"],
-                  input=json.dumps(request).encode(),
-                  capture_output=True,
-                  timeout=10
-              )
-              
-              if result.returncode == 0:
-                  response = json.loads(result.stdout.decode())
-                  if "result" in response:
-                      print("✓ ADO project access successful")
-                      total = response['result'].get('total', 0)
-                      print(f"  Total issues in ADO: {total}")
-                      if response['result'].get('issues'):
-                          latest = response['result']['issues'][0]
-                          print(f"  Latest issue: {latest.get('key')} - {latest.get('summary', 'N/A')}")
-                  else:
-                      print("✗ ADO project access failed")
-                      sys.exit(1)
-              else:
-                  print(f"✗ MCP call failed: {result.stderr.decode()}")
-                  sys.exit(1)
-          except Exception as e:
-              print(f"✗ Error: {e}")
-              sys.exit(1)
+          # Test 3: Verify access to AQD project
+          print('\nTest 3: Verifying AQD project access...')
+          response = requests.get(f'{JIRA_URL}/rest/api/2/project/AQD', headers=headers)
           
-          print("✓ ADO project access verification completed!")
-          EOF
-
-      - name: Verify Project Access (AQD)
-        env:
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-        run: |
-          python3 << 'EOF'
-          import os
-          import sys
-          import json
-          import subprocess
-
-          JIRA_TOKEN = os.getenv('JIRA_TOKEN')
+          if response.status_code == 200:
+              project_data = response.json()
+              print(f'✓ AQD project access successful')
+              print(f'  Project: {project_data.get("name")}')
+              print(f'  Key: {project_data.get("key")}')
+          else:
+              print(f'✗ AQD project access failed: {response.status_code}')
+              print(response.text)
+              exit(1)
           
-          print('Test 3: Verifying AQD project access via MCP...')
+          # Test 4: Verify recent issues in ADO project
+          print('\nTest 4: Verifying issue search capability...')
+          response = requests.get(f'{JIRA_URL}/rest/api/2/search?jql=project=ADO&maxResults=1', headers=headers)
           
-          # Test MCP tool: search_jira_issues for AQD project
-          request = {
-              "jsonrpc": "2.0",
-              "id": 1,
-              "method": "search_jira_issues",
-              "params": {"query": "project = AQD LIMIT 1"}
-          }
+          if response.status_code == 200:
+              search_data = response.json()
+              total_issues = search_data.get('total', 0)
+              print(f'✓ Issue search successful')
+              print(f'  Total issues in ADO: {total_issues}')
+              if search_data.get('issues'):
+                  latest_issue = search_data['issues'][0]
+                  print(f'  Latest issue: {latest_issue.get("key")} - {latest_issue.get("fields", {}).get("summary")}')
+          else:
+              print(f'✗ Issue search failed: {response.status_code}')
+              print(response.text)
+              exit(1)
           
-          try:
-              result = subprocess.run(
-                  ["docker", "compose", "-f", "/Users/dietrichgottfriedschmidt/apps/jira-sync/docker-compose.yml", "run", "--rm", "-T", "mcp-atlassian"],
-                  input=json.dumps(request).encode(),
-                  capture_output=True,
-                  timeout=10
-              )
-              
-              if result.returncode == 0:
-                  response = json.loads(result.stdout.decode())
-                  if "result" in response:
-                      print("✓ AQD project access successful")
-                      total = response['result'].get('total', 0)
-                      print(f"  Total issues in AQD: {total}")
-                      if response['result'].get('issues'):
-                          latest = response['result']['issues'][0]
-                          print(f"  Latest issue: {latest.get('key')} - {latest.get('summary', 'N/A')}")
-                  else:
-                      print("✗ AQD project access failed")
-                      sys.exit(1)
-              else:
-                  print(f"✗ MCP call failed: {result.stderr.decode()}")
-                  sys.exit(1)
-          except Exception as e:
-              print(f"✗ Error: {e}")
-              sys.exit(1)
-          
-          print("✓ AQD project access verification completed!")
+          print('\n✓ All Jira access verification tests passed!')
           EOF
 
       - name: Report Status
         if: success()
-        run: echo "✓ Jira access verification completed successfully via MCP"
+        run: echo "✓ Jira access verification completed successfully"
 
       - name: Report Failure
         if: failure()
@@ -193,5 +114,4 @@ jobs:
           echo "  1. JIRA_TOKEN secret is set in GitHub repository settings"
           echo "  2. The token has not expired"
           echo "  3. The Jira instance is accessible"
-          echo "  4. Docker Compose is available on the runner"
           exit 1
