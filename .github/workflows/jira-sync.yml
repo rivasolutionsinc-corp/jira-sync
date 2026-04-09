@@ -15,7 +15,7 @@ env:
 
 jobs:
   sync-to-jira:
-    runs-on: self-hosted # Recommended for your self-hosted GHE setup
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
           fi
 
   pr-lifecycle:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
       - name: Checkout Code
