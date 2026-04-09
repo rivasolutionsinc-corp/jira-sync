@@ -1,71 +1,41 @@
-name: Jira Workflow Integration (MCP Refactored)
+name: Jira Data Center Integration (MCP)
 on:
   issues:
     types: [opened]
-  push:
-    branches:
-      - 'feature/**'
   pull_request:
-    types: [opened, synchronize, ready_for_review, closed]
-
-env:
-  ATLASSIAN_API_TOKEN: ${{ secrets.JIRA_TOKEN }}
-  ATLASSIAN_DOMAIN: "cmext.ahrq.gov"
-  JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }}
+    types: [opened, synchronize]
 
 jobs:
   sync-to-jira:
-    runs-on: ubuntu-latest
+    # Use 'self-hosted' if your runner is inside the AHRQ network
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/sooperset/mcp-atlassian:latest
+      env:
+        # Use the specific Env Vars required by the sooperset image
+        JIRA_URL: "https://cmext.ahrq.gov/jira"
+        JIRA_PAT: ${{ secrets.AHRQ_JIRA_PAT }}
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # REPLACE: Python create_jira_issue -> mcp-atlassian jira_create_issue
-      - name: Create Jira Ticket on Issue
+      - name: Create Jira Ticket
         if: github.event_name == 'issues'
         run: |
-          npx @modelcontextprotocol/server-atlassian jira_create_issue \
-            --projectKey "$JIRA_PROJECT_KEY" \
+          # The image entrypoint allows calling tools directly via CLI
+          mcp-atlassian jira_create_issue \
+            --project "CLOUD" \
             --summary "GH Issue: ${{ github.event.issue.title }}" \
-            --description "Source: ${{ github.event.issue.html_url }}\n\n${{ github.event.issue.body }}" \
-            --issueType "Task"
+            --description "URL: ${{ github.event.issue.html_url }}"
 
-      # REPLACE: Python add_comment -> mcp-atlassian jira_add_comment
-      - name: Comment on Jira on Push
-        if: github.event_name == 'push'
+      - name: Comment on Jira for PR
+        if: github.event_name == 'pull_request'
         run: |
-          JIRA_KEY=$(echo "${{ github.ref }}" | grep -oE '[A-Z]+-[0-9]+')
-          if [ ! -z "$JIRA_KEY" ]; then
-            npx @modelcontextprotocol/server-atlassian jira_add_comment \
-              --issueKey "$JIRA_KEY" \
-              --body "New code pushed to branch: ${{ github.ref }}\nCommit: ${{ github.sha }}"
-          fi
-
-  pr-lifecycle:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Extract Jira Key
-        id: jira_key
-        run: |
+          # Extract Jira key from PR branch name
           JIRA_KEY=$(echo "${{ github.head_ref }}" | grep -oE '[A-Z]+-[0-9]+' || true)
-          echo "key=$JIRA_KEY" >> $GITHUB_OUTPUT
-
-      # REPLACE: Python transition -> mcp-atlassian jira_transition_issue
-      - name: Handle PR State Changes
-        if: steps.jira_key.outputs.key != ''
-        run: |
-          # Transition based on PR action
-          case "${{ github.event.action }}" in
-            "ready_for_review")
-              npx @modelcontextprotocol/server-atlassian jira_transition_issue --issueKey "${{ steps.jira_key.outputs.key }}" --transitionName "Start Review"
-              ;;
-            "closed")
-              if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
-                npx @modelcontextprotocol/server-atlassian jira_transition_issue --issueKey "${{ steps.jira_key.outputs.key }}" --transitionName "Done"
-              fi
-              ;;
-          esac
+          if [ ! -z "$JIRA_KEY" ]; then
+            mcp-atlassian jira_add_comment \
+              --issueKey "$JIRA_KEY" \
+              --body "Pull Request opened: ${{ github.event.pull_request.html_url }}"
+          fi
