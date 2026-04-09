@@ -8,22 +8,26 @@ on:
 jobs:
   sync-to-jira:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/sooperset/mcp-atlassian:latest
-      env:
-        # Use the specific Env Vars required by the sooperset image
-        JIRA_URL: "https://cmext.ahrq.gov/jira"
-        JIRA_PAT: ${{ secrets.AHRQ_JIRA_PAT }}
+    env:
+      JIRA_URL: "https://cmext.ahrq.gov/jira"
+      JIRA_PAT: ${{ secrets.AHRQ_JIRA_PAT }}
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install MCP Atlassian CLI
+        run: npm install -g @modelcontextprotocol/server-atlassian
+
       - name: Create Jira Ticket
         if: github.event_name == 'issues'
         run: |
-          # The image entrypoint allows calling tools directly via CLI
-          mcp-atlassian jira_create_issue \
+          npx @modelcontextprotocol/server-atlassian jira_create_issue \
             --project "CLOUD" \
             --summary "GH Issue: ${{ github.event.issue.title }}" \
             --description "URL: ${{ github.event.issue.html_url }}"
@@ -34,7 +38,7 @@ jobs:
           # Extract Jira key from PR branch name
           JIRA_KEY=$(echo "${{ github.head_ref }}" | grep -oE '[A-Z]+-[0-9]+' || true)
           if [ ! -z "$JIRA_KEY" ]; then
-            mcp-atlassian jira_add_comment \
+            npx @modelcontextprotocol/server-atlassian jira_add_comment \
               --issueKey "$JIRA_KEY" \
               --body "Pull Request opened: ${{ github.event.pull_request.html_url }}"
           fi
