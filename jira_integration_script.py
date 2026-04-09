@@ -13,6 +13,7 @@ import sys
 import os
 import time
 import re
+import argparse
 from datetime import datetime
 
 # Configuration - Use environment variables for security
@@ -369,6 +370,21 @@ def retry_api_call(func, max_retries=3, backoff_factor=2):
             time.sleep(wait_time)
 
 if __name__ == "__main__":
-    # Example usage for testing
-    # create_jira_issue("AQD", "Test Ticket from Script", "Created via Python API")
-    pass
+    parser = argparse.ArgumentParser(description="Jira Integration Script for GitHub-to-Jira sync")
+    parser.add_argument("--event-name", required=True, help="GitHub event name (issues or pull_request)")
+    parser.add_argument("--jira-url", required=True, help="Jira instance URL")
+    parser.add_argument("--jira-token", required=True, help="Jira API token")
+    parser.add_argument("--project-key", required=True, help="Jira project key")
+    parser.add_argument("--issue-title", default="", help="GitHub issue title")
+    parser.add_argument("--issue-url", default="", help="GitHub issue URL")
+    parser.add_argument("--pr-branch", default="", help="PR branch name")
+    parser.add_argument("--pr-url", default="", help="PR URL")
+    parser.add_argument("--issue-type", default="Task", help="Jira issue type (default: Task)")
+    
+    args = parser.parse_args()
+    
+    # TODO: Implement event routing logic here
+    # For now, this is a placeholder for the main execution logic
+    print(f"Event: {args.event_name}")
+    print(f"Project: {args.project_key}")
+    print(f"Issue Type: {args.issue_type}")
