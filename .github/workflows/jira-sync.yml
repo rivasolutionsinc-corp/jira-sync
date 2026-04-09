@@ -1,71 +1,96 @@
-name: Jira Workflow Integration (MCP Refactored)
+name: Jira Data Center Integration (MCP)
 on:
   issues:
     types: [opened]
-  push:
-    branches:
-      - 'feature/**'
   pull_request:
-    types: [opened, synchronize, ready_for_review, closed]
-
-env:
-  ATLASSIAN_API_TOKEN: ${{ secrets.JIRA_TOKEN }}
-  ATLASSIAN_DOMAIN: "cmext.ahrq.gov"
-  JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }}
+    types: [opened, synchronize]
 
 jobs:
   sync-to-jira:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    env:
+      JIRA_PAT: ${{ secrets.JIRA_TOKEN }}
 
-      # REPLACE: Python create_jira_issue -> mcp-atlassian jira_create_issue
-      - name: Create Jira Ticket on Issue
+    steps:
+      - name: Start MCP Atlassian Server
+        run: |
+          docker run -d --name mcp-atlassian \
+            -e JIRA_URL="https://cmext.ahrq.gov/jira" \
+            -e JIRA_PERSONAL_TOKEN="$JIRA_PAT" \
+            -p 8080:8080 \
+            ghcr.io/sooperset/mcp-atlassian:latest \
+            --transport streamable-http --port 8080 --path /mcp --stateless
+
+      - name: Wait for MCP Service
+        run: |
+          echo "Checking container status..."
+          docker ps -a | grep mcp-atlassian
+          
+          echo "Checking container environment..."
+          docker exec mcp-atlassian env | grep -i jira || echo "No JIRA env vars found"
+          
+          echo "Waiting for MCP service to be ready..."
+          sleep 3
+          for i in {1..30}; do
+            echo "Attempt $i/30: Testing http://localhost:8080/mcp"
+            RESPONSE=$(curl -s -X POST http://localhost:8080/mcp \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json, text/event-stream" \
+              -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' 2>&1 || true)
+            echo "Response: $RESPONSE"
+            if echo "$RESPONSE" | grep -q '"tools"'; then
+              echo "✓ MCP service is ready with tools available"
+              exit 0
+            fi
+            echo "  → Service not ready yet, retrying in 2s..."
+            sleep 2
+          done
+          
+          echo "✗ MCP service failed to start after 30 attempts"
+          echo "Final container logs:"
+          docker logs mcp-atlassian
+          exit 1
+
+      - name: Create Jira Ticket
         if: github.event_name == 'issues'
         run: |
-          npx @modelcontextprotocol/server-atlassian jira_create_issue \
-            --projectKey "$JIRA_PROJECT_KEY" \
-            --summary "GH Issue: ${{ github.event.issue.title }}" \
-            --description "Source: ${{ github.event.issue.html_url }}\n\n${{ github.event.issue.body }}" \
-            --issueType "Task"
+          curl -s -X POST http://localhost:8080/mcp \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json, text/event-stream" \
+            -d '{
+              "jsonrpc": "2.0",
+              "method": "tools/call",
+              "params": {
+                "name": "jira_create_issue",
+                "arguments": {
+                  "project_key": "CLOUD",
+                  "summary": "GH Issue: ${{ github.event.issue.title }}",
+                  "description": "URL: ${{ github.event.issue.html_url }}",
+                  "issue_type": "Task"
+                }
+              },
+              "id": 1
+            }'
 
-      # REPLACE: Python add_comment -> mcp-atlassian jira_add_comment
-      - name: Comment on Jira on Push
-        if: github.event_name == 'push'
+      - name: Comment on Jira for PR
+        if: github.event_name == 'pull_request'
         run: |
-          JIRA_KEY=$(echo "${{ github.ref }}" | grep -oE '[A-Z]+-[0-9]+')
-          if [ ! -z "$JIRA_KEY" ]; then
-            npx @modelcontextprotocol/server-atlassian jira_add_comment \
-              --issueKey "$JIRA_KEY" \
-              --body "New code pushed to branch: ${{ github.ref }}\nCommit: ${{ github.sha }}"
-          fi
-
-  pr-lifecycle:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Extract Jira Key
-        id: jira_key
-        run: |
+          # Extract Jira key from PR branch name
           JIRA_KEY=$(echo "${{ github.head_ref }}" | grep -oE '[A-Z]+-[0-9]+' || true)
-          echo "key=$JIRA_KEY" >> $GITHUB_OUTPUT
-
-      # REPLACE: Python transition -> mcp-atlassian jira_transition_issue
-      - name: Handle PR State Changes
-        if: steps.jira_key.outputs.key != ''
-        run: |
-          # Transition based on PR action
-          case "${{ github.event.action }}" in
-            "ready_for_review")
-              npx @modelcontextprotocol/server-atlassian jira_transition_issue --issueKey "${{ steps.jira_key.outputs.key }}" --transitionName "Start Review"
-              ;;
-            "closed")
-              if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
-                npx @modelcontextprotocol/server-atlassian jira_transition_issue --issueKey "${{ steps.jira_key.outputs.key }}" --transitionName "Done"
-              fi
-              ;;
-          esac
+          if [ ! -z "$JIRA_KEY" ]; then
+            curl -s -X POST http://localhost:8080/mcp \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json, text/event-stream" \
+              -d '{
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {
+                  "name": "jira_add_comment",
+                  "arguments": {
+                    "issue_key": "'$JIRA_KEY'",
+                    "body": "Pull Request opened: ${{ github.event.pull_request.html_url }}"
+                  }
+                },
+                "id": 1
+              }'
+          fi
