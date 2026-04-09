@@ -30,12 +30,13 @@ jobs:
           docker exec mcp-atlassian env | grep -i jira || echo "No JIRA env vars found"
           
           echo "Waiting for MCP service to be ready..."
+          sleep 3
           for i in {1..30}; do
             echo "Attempt $i/30: Testing http://localhost:8080/mcp"
             RESPONSE=$(curl -s -X POST http://localhost:8080/mcp \
               -H "Content-Type: application/json" \
               -H "Accept: application/json, text/event-stream" \
-              -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' 2>&1)
+              -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' 2>&1 || true)
             echo "Response: $RESPONSE"
             if echo "$RESPONSE" | grep -q '"tools"'; then
               echo "✓ MCP service is ready with tools available"
