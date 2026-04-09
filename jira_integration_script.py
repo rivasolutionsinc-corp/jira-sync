@@ -23,9 +23,9 @@ JIRA_TOKEN = os.getenv("JIRA_TOKEN", os.getenv("JIRA_PAT", "YOUR_PAT_HERE"))
 try:
     from mcp_client import atlassian_mcp
     MCP_AVAILABLE = True
-except ImportError:
+except Exception as e:
     MCP_AVAILABLE = False
-    print("[WARNING] mcp_client module not available. Falling back to REST API.")
+    print(f"[WARNING] MCP client initialization failed: {e}. Falling back to REST API.")
 
 
 def create_jira_issue(project_key, summary, description, issue_type="Task"):
