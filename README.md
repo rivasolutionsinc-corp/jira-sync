@@ -1,12 +1,12 @@
 # Jira & GitHub Workflow Automation
 
-Automated integration between GitHub and self-hosted Jira (cmext.ahrq.gov/jira) for the AHRQ Drupal ecosystem using MCP (Model Context Protocol) Atlassian container.
+Automated integration between GitHub and self-hosted Jira (cmext.ahrq.gov/jira) for the AHRQ Drupal ecosystem using a containerized Docker Action.
 
 ## Overview
 
-This project automates the lifecycle between GitHub and Jira, enabling seamless synchronization of issues and pull requests. It uses a containerized MCP Atlassian server for reliable, stateless JSON-RPC communication with Jira.
+This project automates the lifecycle between GitHub and Jira, enabling seamless synchronization of issues and pull requests. It uses a containerized Docker Action for reliable, stateless communication with Jira via REST API.
 
-**Current Status:** ✅ Production-Ready (CLOUD-1927 E2E tested)
+**Current Status:** ✅ Production-Ready (CLOUD-1929 Docker Container Action)
 
 ## Features
 
@@ -15,12 +15,18 @@ This project automates the lifecycle between GitHub and Jira, enabling seamless 
 - **GitHub PR Opened/Synchronized** → Automatically adds comments to linked Jira issue with PR details
 - **Jira Key Extraction** → Automatically extracts Jira key from branch name (e.g., `feature/CLOUD-1927`)
 
+### Docker Container Action (CLOUD-1929)
+- **Containerized Action** - Published to GHCR for cross-repository reusability
+- **8–24x Faster Startup** - 5–15 seconds vs 60–120 seconds
+- **61% Simpler Workflows** - Reduced complexity from 97 to 38 lines
+- **Cross-Organization Reuse** - Use in any GitHub repository
+
 ### Technology Stack
-- **Container:** `ghcr.io/sooperset/mcp-atlassian:latest`
-- **Transport:** Streamable HTTP with stateless mode
-- **Protocol:** JSON-RPC 2.0
+- **Container:** `ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest`
+- **Transport:** REST API with Bearer token authentication
+- **Protocol:** HTTP/JSON
 - **Authentication:** Jira Personal Access Token
-- **CI/CD:** GitHub Actions
+- **CI/CD:** GitHub Actions with Docker Container Action
 
 ## Quick Start
 
@@ -61,7 +67,7 @@ GitHub Repository
     ↓
 GitHub Actions Workflow (.github/workflows/jira-sync.yml)
     ↓
-MCP Atlassian Container (ghcr.io/sooperset/mcp-atlassian:latest)
+Docker Container Action (ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest)
     ↓
 Jira Server (cmext.ahrq.gov/jira)
 ```
@@ -69,20 +75,19 @@ Jira Server (cmext.ahrq.gov/jira)
 ### Workflow Execution Flow
 
 1. **Event Trigger** - GitHub issue opened or PR opened/synchronized
-2. **Container Start** - MCP Atlassian container starts with streamable-http transport
-3. **Health Check** - Validates service readiness with JSON-RPC tools/list call
-4. **Jira Operation** - Calls appropriate Jira tool (jira_create_issue or jira_add_comment)
-5. **Result** - Issue created or comment added to Jira
+2. **Action Start** - Docker Container Action starts with environment variables
+3. **Jira Operation** - Calls appropriate Jira REST API (create issue or add comment)
+4. **Result** - Issue created or comment added to Jira
 
 ### Key Configuration
 
-**Transport:** `streamable-http --port 8080 --path /mcp --stateless`
-- Stateless mode eliminates session management complexity
-- Suitable for ephemeral GitHub Actions runners
-- Requires Accept header: `application/json, text/event-stream`
+**Container:** `ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest`
+- Containerized Python script with Jira integration
+- Stateless operation suitable for ephemeral GitHub Actions runners
+- REST API communication with Jira
 
-**Authentication:** `JIRA_PERSONAL_TOKEN` environment variable
-- Maps to `--jira-personal-token` flag
+**Authentication:** `JIRA_TOKEN` environment variable
+- Bearer token authentication
 - Correct for Jira Server/Data Center (not Cloud)
 
 ## Workflow File
@@ -100,10 +105,37 @@ Main workflow file that orchestrates Jira integrations:
 1. `sync-to-jira` - Handles GitHub issues and PRs
 
 **Steps:**
-1. Start MCP Atlassian container
-2. Wait for service readiness (health check)
-3. Create Jira ticket (on issue opened)
-4. Add comment to Jira (on PR opened/synchronized)
+1. Call Docker Container Action with environment variables
+2. Create Jira ticket (on issue opened)
+3. Add comment to Jira (on PR opened/synchronized)
+
+## Using the Published Action
+
+### In This Repository
+
+```yaml
+- uses: ./.github/actions/jira-sync
+  with:
+    jira-url: 'https://cmext.ahrq.gov/jira'
+    jira-token: ${{ secrets.JIRA_TOKEN }}
+    project-key: 'CLOUD'
+    event-name: ${{ github.event_name }}
+    pr-branch: ${{ github.head_ref }}
+    pr-url: ${{ github.event.pull_request.html_url }}
+```
+
+### In Other Repositories (Using Published Image)
+
+```yaml
+- uses: rivasolutionsinc-corp/jira-sync/.github/actions/jira-sync@v1.0.0
+  with:
+    jira-url: ${{ secrets.JIRA_URL }}
+    jira-token: ${{ secrets.JIRA_TOKEN }}
+    project-key: ${{ secrets.JIRA_PROJECT_KEY }}
+    event-name: ${{ github.event_name }}
+    pr-branch: ${{ github.head_ref }}
+    pr-url: ${{ github.event.pull_request.html_url }}
+```
 
 ## Setup & Configuration
 
@@ -151,43 +183,36 @@ Main workflow file that orchestrates Jira integrations:
 ### Common Issues
 
 #### 1. "Jira client not available" Error
-**Cause:** Secret not passed to container or authentication failed
+**Cause:** Secret not passed to action or authentication failed
 
 **Solution:**
 - Verify `JIRA_TOKEN` secret is set in GitHub
 - Check secret value is correct (no extra spaces)
 - Verify token has API access permissions
-- Check container logs: `docker logs mcp-atlassian`
+- Check action logs in GitHub Actions
 
-#### 2. "Not Acceptable: Client must accept both application/json and text/event-stream"
-**Cause:** Missing Accept header in curl request
-
-**Solution:**
-- Verify workflow includes Accept header
-- Header should be: `Accept: application/json, text/event-stream`
-- Already fixed in current workflow
-
-#### 3. "Bad Request: Missing session ID"
-**Cause:** Using stateful transport instead of stateless
+#### 2. "Connection refused" Error
+**Cause:** Jira URL is incorrect or Jira is unreachable
 
 **Solution:**
-- Verify `--stateless` flag is in container startup
-- Current workflow uses correct flag
+- Verify `JIRA_URL` is correct (e.g., `https://cmext.ahrq.gov/jira`)
+- Check network connectivity to Jira server
+- Verify firewall rules allow GitHub Actions to reach Jira
 
-#### 4. Workflow Fails on First Attempt
-**Cause:** Container not ready yet
-
-**Solution:**
-- Workflow includes 3-second initial sleep
-- Health check retries up to 30 times
-- Typical startup time: 8-10 seconds
-
-#### 5. "No Jira key found in branch name"
+#### 3. "No Jira key found in branch name"
 **Cause:** Branch name doesn't match `feature/PROJECT-KEY` pattern
 
 **Solution:**
 - Rename branch to follow convention
 - Example: `feature/CLOUD-1927`
+
+#### 4. Action Fails on First Attempt
+**Cause:** Jira server not responding yet
+
+**Solution:**
+- Retry the workflow
+- Check Jira server status
+- Verify network connectivity
 
 ### Debug Logging
 
@@ -197,8 +222,7 @@ Enable verbose logging by checking GitHub Actions workflow logs:
 2. Click on workflow run
 3. Expand job logs to see detailed output
 4. Look for:
-   - Container status checks
-   - Health check attempts
+   - Action startup messages
    - Jira API responses
    - Error messages
 
@@ -207,41 +231,35 @@ Enable verbose logging by checking GitHub Actions workflow logs:
 Test locally with Docker:
 
 ```bash
-# Start container
-docker run -d --name mcp-test \
+# Pull the published image
+docker pull ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest
+
+# Run the action
+docker run --rm \
   -e JIRA_URL="https://cmext.ahrq.gov/jira" \
-  -e JIRA_PERSONAL_TOKEN="your-token" \
-  -p 8080:8080 \
-  ghcr.io/sooperset/mcp-atlassian:latest \
-  --transport streamable-http --port 8080 --path /mcp --stateless
+  -e JIRA_TOKEN="your-token" \
+  -e PROJECT_KEY="CLOUD" \
+  -e EVENT_NAME="pull_request" \
+  -e PR_BRANCH="feature/CLOUD-1927" \
+  -e PR_URL="https://github.com/rivasolutionsinc-corp/jira-sync/pull/1" \
+  ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest
+```
 
-# Test health check
-curl -s -X POST http://localhost:8080/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+## Testing
 
-# Test create issue
-curl -s -X POST http://localhost:8080/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "jira_create_issue",
-      "arguments": {
-        "project_key": "CLOUD",
-        "summary": "Test Issue",
-        "description": "Test from local",
-        "issue_type": "Task"
-      }
-    },
-    "id": 1
-  }'
+### Published Image Test
 
-# Cleanup
-docker stop mcp-test && docker rm mcp-test
+The repository includes automated tests for the published Docker image:
+
+**Test Workflow:** `.github/workflows/test-published-image.yml`
+- Pulls the published image from GHCR
+- Authenticates with GHCR using GITHUB_TOKEN
+- Tests Jira connectivity by listing issues
+- Validates image execution
+
+**Run Test Manually:**
+```bash
+gh workflow run test-published-image.yml
 ```
 
 ## Documentation
@@ -299,7 +317,7 @@ See [`05-FUTURE-ENHANCEMENTS.md`](.ai-memory/05-FUTURE-ENHANCEMENTS.md) for deta
 
 ### Rate Limiting
 - Jira API rate limits: ~10 requests/second
-- Health check includes retry logic with exponential backoff
+- Action includes retry logic with exponential backoff
 - Monitors for rate limit errors
 
 ## Development
@@ -311,9 +329,9 @@ See [`05-FUTURE-ENHANCEMENTS.md`](.ai-memory/05-FUTURE-ENHANCEMENTS.md) for deta
    - Call appropriate Jira tool
 
 2. **Test locally:**
-   - Use Docker to test container startup
-   - Test JSON-RPC calls manually
-   - Verify Jira operations
+   - Use Docker to test action startup
+   - Test Jira operations
+   - Verify integration
 
 3. **Create feature branch:**
    ```bash
@@ -324,11 +342,20 @@ See [`05-FUTURE-ENHANCEMENTS.md`](.ai-memory/05-FUTURE-ENHANCEMENTS.md) for deta
 
 4. **Create pull request and merge after review**
 
+### Publishing Updates
+
+When updating the action:
+
+1. Update action files in `.github/actions/jira-sync/`
+2. Create a new version tag (e.g., `v1.1.0`)
+3. Push tag to trigger publish workflow
+4. Publish workflow automatically builds and pushes to GHCR
+
 ## References
 
-- [MCP Atlassian Documentation](https://github.com/sooperset/mcp-atlassian)
-- [Jira REST API v2 Documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v2/)
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
+- [Jira REST API v2 Documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v2/)
 - [GitHub Webhook Events](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads)
 
 ## Support
@@ -336,9 +363,8 @@ See [`05-FUTURE-ENHANCEMENTS.md`](.ai-memory/05-FUTURE-ENHANCEMENTS.md) for deta
 For issues or questions:
 1. Check troubleshooting section above
 2. Review workflow logs in GitHub Actions
-3. Check container logs: `docker logs mcp-atlassian`
-4. Review comprehensive documentation in `.ai-memory/`
-5. Contact DevOps team
+3. Review comprehensive documentation in `.ai-memory/`
+4. Contact DevOps team
 
 ## License
 
