@@ -6,7 +6,8 @@ echo "Event:   $EVENT_NAME"
 echo "Project: $PROJECT_KEY"
 echo "::endgroup::"
 
-python /action/jira_integration_script.py \
+cd /action
+python -m jira_integration_script \
   --event-name    "$EVENT_NAME" \
   --jira-url      "$JIRA_URL" \
   --jira-token    "$JIRA_TOKEN" \
