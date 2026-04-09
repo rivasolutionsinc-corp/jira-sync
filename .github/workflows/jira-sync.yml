@@ -8,17 +8,17 @@ on:
 jobs:
   sync-to-jira:
     runs-on: ubuntu-latest
-    services:
-      mcp-atlassian:
-        image: ghcr.io/sooperset/mcp-atlassian:latest
-        options: --user root
-        env:
-          JIRA_URL: "https://cmext.ahrq.gov/jira"
-          JIRA_PAT: ${{ secrets.AHRQ_JIRA_PAT }}
-        ports:
-          - 8080:8080
 
     steps:
+      - name: Start MCP Atlassian Server
+        run: |
+          docker run -d --name mcp-atlassian \
+            -e JIRA_URL="https://cmext.ahrq.gov/jira" \
+            -e JIRA_PAT="${{ secrets.AHRQ_JIRA_PAT }}" \
+            -p 8080:8080 \
+            ghcr.io/sooperset/mcp-atlassian:latest \
+            --transport sse --port 8080
+
       - name: Wait for MCP Service
         run: |
           for i in {1..30}; do
