@@ -8,11 +8,11 @@ on:
 jobs:
   sync-to-jira:
     runs-on: ubuntu-latest
+    env:
+      JIRA_PAT: ${{ secrets.AHRQ_JIRA_PAT }}
 
     steps:
       - name: Start MCP Atlassian Server
-        env:
-          JIRA_PAT: ${{ secrets.AHRQ_JIRA_PAT }}
         run: |
           docker run -d --name mcp-atlassian \
             -e JIRA_URL="https://cmext.ahrq.gov/jira" \
