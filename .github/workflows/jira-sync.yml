@@ -9,7 +9,7 @@ jobs:
   sync-to-jira:
     runs-on: ubuntu-latest
     env:
-      JIRA_PAT: ${{ secrets.AHRQ_JIRA_PAT }}
+      JIRA_PAT: ${{ secrets.JIRA_TOKEN }}
 
     steps:
       - name: Start MCP Atlassian Server
