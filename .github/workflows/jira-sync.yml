@@ -1,4 +1,4 @@
-name: Jira Workflow Integration
+name: Jira Workflow Integration (MCP Refactored)
 on:
   issues:
     types: [opened]
@@ -8,210 +8,64 @@ on:
   pull_request:
     types: [opened, synchronize, ready_for_review, closed]
 
+env:
+  ATLASSIAN_API_TOKEN: ${{ secrets.JIRA_TOKEN }}
+  ATLASSIAN_DOMAIN: "cmext.ahrq.gov"
+  JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }}
+
 jobs:
   sync-to-jira:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted # Recommended for your self-hosted GHE setup
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install Dependencies
-        run: pip install requests python-dotenv
-
-      # Step to create a Jira ticket when a GitHub issue is opened
+      # REPLACE: Python create_jira_issue -> mcp-atlassian jira_create_issue
       - name: Create Jira Ticket on Issue
         if: github.event_name == 'issues'
-        env:
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-          JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY}}
         run: |
-          python -c "
-          import os
-          os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
-          from jira_integration_script import create_jira_issue, get_issue_details, change_issue_status
-          project_key = os.getenv('JIRA_PROJECT_KEY', 'AQD')
-          issue_key = create_jira_issue(project_key, 'GH Issue: ${{ github.event.issue.title }}', 'Description: ${{ github.event.issue.html_url }}\n\n${{ github.event.issue.body }}')
-          if issue_key:
-              details = get_issue_details(issue_key)
-              print(f'Issue created: {issue_key}')
-              print(f'Status: {details[\"status\"]}')
-              # Optionally transition to 'Start Progress' on creation
-              # change_issue_status(issue_key, 'Start Progress')
-          "
+          npx @modelcontextprotocol/server-atlassian jira_create_issue \
+            --projectKey "$JIRA_PROJECT_KEY" \
+            --summary "GH Issue: ${{ github.event.issue.title }}" \
+            --description "Source: ${{ github.event.issue.html_url }}\n\n${{ github.event.issue.body }}" \
+            --issueType "Task"
 
-      # Step to add a comment to Jira when code is pushed to a feature branch
+      # REPLACE: Python add_comment -> mcp-atlassian jira_add_comment
       - name: Comment on Jira on Push
         if: github.event_name == 'push'
-        env:
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
         run: |
-          # Extract Jira Key from branch name (e.g., feature/AQD-1234 -> AQD-1234)
           JIRA_KEY=$(echo "${{ github.ref }}" | grep -oE '[A-Z]+-[0-9]+')
           if [ ! -z "$JIRA_KEY" ]; then
-            python -c "
-            import os
-            os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
-            from jira_integration_script import add_comment, get_issue_details, change_issue_status
-            add_comment('$JIRA_KEY', 'New code pushed to GitHub branch: ${{ github.ref }}\nCommit: ${{ github.sha }}')
-            details = get_issue_details('$JIRA_KEY')
-            print(f'Comment added to $JIRA_KEY')
-            print(f'Current status: {details[\"status\"]}')
-            # Optionally transition to 'Start Progress' on push
-            # change_issue_status('$JIRA_KEY', 'Start Progress')
-            "
+            npx @modelcontextprotocol/server-atlassian jira_add_comment \
+              --issueKey "$JIRA_KEY" \
+              --body "New code pushed to branch: ${{ github.ref }}\nCommit: ${{ github.sha }}"
           fi
 
   pr-lifecycle:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: github.event_name == 'pull_request'
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install Dependencies
-        run: pip install requests python-dotenv
-
-      # Extract Jira Key from PR branch name with fallback to PR context
-      - name: Extract Jira Key from Branch
+      - name: Extract Jira Key
         id: jira_key
         run: |
-          # Try to extract from head_ref (PR branch name)
           JIRA_KEY=$(echo "${{ github.head_ref }}" | grep -oE '[A-Z]+-[0-9]+' || true)
-          
-          # Fallback to PR context if head_ref extraction fails
-          if [ -z "$JIRA_KEY" ]; then
-            echo "[INFO] No Jira key found in head_ref: ${{ github.head_ref }}"
-            JIRA_KEY=$(echo "${{ github.event.pull_request.head.ref }}" | grep -oE '[A-Z]+-[0-9]+' || true)
-            if [ -n "$JIRA_KEY" ]; then
-              echo "[INFO] Extracted Jira key from PR context: $JIRA_KEY"
-            fi
-          else
-            echo "[INFO] Extracted Jira key from head_ref: $JIRA_KEY"
-          fi
-          
           echo "key=$JIRA_KEY" >> $GITHUB_OUTPUT
-          
-          if [ -z "$JIRA_KEY" ]; then
-            echo "[WARNING] No Jira key found in branch name or PR context"
-            echo "[DEBUG] head_ref: ${{ github.head_ref }}"
-            echo "[DEBUG] PR head ref: ${{ github.event.pull_request.head.ref }}"
-          fi
 
-      # Handle PR opened event - Create Jira subtask
-      - name: Create Jira Subtask on PR Open
-        if: github.event.action == 'opened' && steps.jira_key.outputs.key != ''
-        continue-on-error: true
-        env:
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+      # REPLACE: Python transition -> mcp-atlassian jira_transition_issue
+      - name: Handle PR State Changes
+        if: steps.jira_key.outputs.key != ''
         run: |
-          python -c "
-          import os
-          os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
-          from jira_integration_script import create_jira_subtask
-          subtask_key = create_jira_subtask(
-            '${{ steps.jira_key.outputs.key }}',
-            'PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}',
-            'PR URL: ${{ github.event.pull_request.html_url }}\nAuthor: ${{ github.event.pull_request.user.login }}\nCreated: ${{ github.event.pull_request.created_at }}'
-          )
-          if subtask_key:
-            print(f'Subtask created: {subtask_key}')
-          "
-
-      # Handle PR synchronize event - Update Jira comment with new commits
-      - name: Update Jira on PR Sync
-        if: github.event.action == 'synchronize' && steps.jira_key.outputs.key != ''
-        continue-on-error: true
-        env:
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-        run: |
-          python -c "
-          import os
-          os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
-          from jira_integration_script import add_comment
-          add_comment(
-            '${{ steps.jira_key.outputs.key }}',
-            'New commits pushed to PR #${{ github.event.pull_request.number }}\nLatest commit: ${{ github.event.pull_request.head.sha }}\nAuthor: ${{ github.event.pull_request.head.user.login }}\nUpdated: ${{ github.event.pull_request.updated_at }}'
-          )
-          print('Comment added to Jira issue')
-          "
-
-      # Handle PR ready for review - Transition to In Review
-      - name: Transition Jira to In Review
-        if: github.event.action == 'ready_for_review' && steps.jira_key.outputs.key != ''
-        continue-on-error: true
-        env:
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-        run: |
-          python -c "
-          import os
-          os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
-          from jira_integration_script import change_issue_status
-          success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'Start Review')
-          if success:
-            print('Issue transitioned to Start Review')
-          else:
-            print('Warning: Could not transition to Start Review (transition may not exist)')
-          "
-
-      # Handle PR closed without merge
-      - name: Handle PR Closed Without Merge
-        if: github.event.action == 'closed' && github.event.pull_request.merged == false && steps.jira_key.outputs.key != ''
-        continue-on-error: true
-        env:
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-        run: |
-          python -c "
-          import os
-          os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
-          from jira_integration_script import add_comment
-          add_comment(
-            '${{ steps.jira_key.outputs.key }}',
-            'PR #${{ github.event.pull_request.number }} closed without merge\nClosed by: ${{ github.event.pull_request.user.login }}\nClosed at: ${{ github.event.pull_request.closed_at }}'
-          )
-          print('Comment added for PR closure')
-          "
-
-      # Handle PR merge - Transition to Merged
-      - name: Handle PR Merge
-        if: github.event.action == 'closed' && github.event.pull_request.merged == true && steps.jira_key.outputs.key != ''
-        continue-on-error: true
-        env:
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-        run: |
-          python -c "
-          import os
-          os.environ['JIRA_TOKEN'] = os.getenv('JIRA_TOKEN')
-          from jira_integration_script import add_comment, change_issue_status
-          add_comment(
-            '${{ steps.jira_key.outputs.key }}',
-            'PR #${{ github.event.pull_request.number }} merged to ${{ github.event.pull_request.base.ref }}\nMerge commit: ${{ github.event.pull_request.merge_commit_sha }}\nMerged by: ${{ github.event.pull_request.merged_by.login }}\nMerged at: ${{ github.event.pull_request.closed_at }}'
-          )
-          print('[DEBUG] Attempting to transition ${{ steps.jira_key.outputs.key }} to Done')
-          # First try to transition to Start Progress (intermediate state)
-          success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'Start Progress')
-          if success:
-            print('[INFO] Issue transitioned to Start Progress')
-            # Then transition to Done
-            success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'Done')
-            if success:
-              print('[SUCCESS] Issue transitioned to Done')
-            else:
-              print('[WARNING] Could not transition to Done from Start Progress')
-          else:
-            print('[WARNING] Could not transition to Start Progress, trying Done directly')
-            success = change_issue_status('${{ steps.jira_key.outputs.key }}', 'Done')
-            if success:
-              print('[SUCCESS] Issue transitioned to Done')
-            else:
-              print('[ERROR] Could not transition to Done (no valid transition path)')
-          "
+          # Transition based on PR action
+          case "${{ github.event.action }}" in
+            "ready_for_review")
+              npx @modelcontextprotocol/server-atlassian jira_transition_issue --issueKey "${{ steps.jira_key.outputs.key }}" --transitionName "Start Review"
+              ;;
+            "closed")
+              if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+                npx @modelcontextprotocol/server-atlassian jira_transition_issue --issueKey "${{ steps.jira_key.outputs.key }}" --transitionName "Done"
+              fi
+              ;;
+          esac
