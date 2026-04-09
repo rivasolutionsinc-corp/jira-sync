@@ -8,21 +8,49 @@ on:
 jobs:
   sync-to-jira:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/sooperset/mcp-atlassian:latest
-      options: --user root
-      env:
-        JIRA_URL: "https://cmext.ahrq.gov/jira"
-        JIRA_PAT: ${{ secrets.AHRQ_JIRA_PAT }}
+    services:
+      mcp-atlassian:
+        image: ghcr.io/sooperset/mcp-atlassian:latest
+        options: --user root
+        env:
+          JIRA_URL: "https://cmext.ahrq.gov/jira"
+          JIRA_PAT: ${{ secrets.AHRQ_JIRA_PAT }}
+        ports:
+          - 8080:8080
 
     steps:
+      - name: Wait for MCP Service
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:8080/sse > /dev/null 2>&1; then
+              echo "MCP service is ready"
+              exit 0
+            fi
+            echo "Waiting for MCP service... ($i/30)"
+            sleep 1
+          done
+          echo "MCP service failed to start"
+          exit 1
+
       - name: Create Jira Ticket
         if: github.event_name == 'issues'
         run: |
-          mcp-atlassian jira_create_issue \
-            --project "CLOUD" \
-            --summary "GH Issue: ${{ github.event.issue.title }}" \
-            --description "URL: ${{ github.event.issue.html_url }}"
+          curl -X POST http://localhost:8080/sse \
+            -H "Content-Type: application/json" \
+            -d '{
+              "jsonrpc": "2.0",
+              "method": "tools/call",
+              "params": {
+                "name": "jira_create_issue",
+                "arguments": {
+                  "project_key": "CLOUD",
+                  "summary": "GH Issue: ${{ github.event.issue.title }}",
+                  "description": "URL: ${{ github.event.issue.html_url }}",
+                  "issue_type": "Task"
+                }
+              },
+              "id": 1
+            }'
 
       - name: Comment on Jira for PR
         if: github.event_name == 'pull_request'
@@ -30,7 +58,18 @@ jobs:
           # Extract Jira key from PR branch name
           JIRA_KEY=$(echo "${{ github.head_ref }}" | grep -oE '[A-Z]+-[0-9]+' || true)
           if [ ! -z "$JIRA_KEY" ]; then
-            mcp-atlassian jira_add_comment \
-              --issueKey "$JIRA_KEY" \
-              --body "Pull Request opened: ${{ github.event.pull_request.html_url }}"
+            curl -X POST http://localhost:8080/sse \
+              -H "Content-Type: application/json" \
+              -d '{
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {
+                  "name": "jira_add_comment",
+                  "arguments": {
+                    "issue_key": "'$JIRA_KEY'",
+                    "body": "Pull Request opened: ${{ github.event.pull_request.html_url }}"
+                  }
+                },
+                "id": 1
+              }'
           fi
