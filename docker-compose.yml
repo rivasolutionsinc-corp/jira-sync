@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  mcp-atlassian:
+    # Use official multi-arch image from sooperset/mcp-atlassian
+    # Supports amd64 (Linux CI/CD) and arm64 (Apple Silicon)
+    image: ghcr.io/sooperset/mcp-atlassian:latest
+    stdin_open: true
+    tty: false
+    environment:
+      - JIRA_URL=${JIRA_URL}
+      - JIRA_USERNAME=${JIRA_USERNAME}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
+      - CONFLUENCE_URL=${CONFLUENCE_URL}
+      - CONFLUENCE_USERNAME=${CONFLUENCE_USERNAME}
+      - CONFLUENCE_API_TOKEN=${CONFLUENCE_API_TOKEN}
+    restart: "no"
