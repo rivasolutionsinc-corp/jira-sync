@@ -33,8 +33,9 @@ jobs:
             -e JIRA_TOKEN="${{ secrets.JIRA_TOKEN }}" \
             -e PROJECT_KEY="CLOUD" \
             -v ${{ github.workspace }}/.github/actions/jira-sync/test_jira_connectivity.py:/test_jira_connectivity.py \
+            --entrypoint python \
             ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest \
-            python /test_jira_connectivity.py
+            /test_jira_connectivity.py
 
       - name: Verify image execution
         run: |
