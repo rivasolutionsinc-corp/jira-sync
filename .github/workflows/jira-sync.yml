@@ -156,9 +156,8 @@ jobs:
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
           project-key: ${{ env.PROJECT_KEY }}
           event-name: 'push'
-          push-branch: ${{ github.ref_name }}
-          deployment-stage: 'development'
-          deployment-branch: ${{ github.ref_name }}
+          pr-branch: ${{ github.ref_name }}
+          issue-type: 'Task'
 
   # Handle tag creation events (production releases)
   handle-tag-creation:
