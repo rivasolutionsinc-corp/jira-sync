@@ -12,6 +12,19 @@ ISSUE_URL="${7:-}"
 PR_BRANCH="${8:-}"
 PR_URL="${9:-}"
 ISSUE_TYPE="${10:-Task}"
+PR_ACTION="${11:-}"
+PR_MERGED="${12:-}"
+TRANSITION_OPENED="${13:-}"
+TRANSITION_MERGED="${14:-}"
+LINK_TITLE="${15:-}"
+PUSH_BRANCH="${16:-}"
+TARGET_BRANCH="${17:-}"
+TRANSITION_TAG="${18:-}"
+DEPLOYMENT_STAGE="${19:-}"
+DEPLOYMENT_BRANCH="${20:-}"
+TAG_NAME="${21:-}"
+TAG_REF="${22:-}"
+DEPLOYMENT_TAG="${23:-}"
 
 echo "::group::Jira Sync Action"
 echo "Event:   $EVENT_NAME"
@@ -27,4 +40,17 @@ python /action/jira_integration_script.py \
    --issue-url     "$ISSUE_URL" \
    --pr-branch     "$PR_BRANCH" \
    --pr-url        "$PR_URL" \
-   --issue-type    "$ISSUE_TYPE"
+   --issue-type    "$ISSUE_TYPE" \
+   --pr-action     "$PR_ACTION" \
+   --pr-merged     "$PR_MERGED" \
+   --transition-opened "$TRANSITION_OPENED" \
+   --transition-merged "$TRANSITION_MERGED" \
+   --link-title    "$LINK_TITLE" \
+   --push-branch   "$PUSH_BRANCH" \
+   --target-branch "$TARGET_BRANCH" \
+   --transition-tag "$TRANSITION_TAG" \
+   --deployment-stage "$DEPLOYMENT_STAGE" \
+   --deployment-branch "$DEPLOYMENT_BRANCH" \
+   --tag-name      "$TAG_NAME" \
+   --tag-ref       "$TAG_REF" \
+   --deployment-tag "$DEPLOYMENT_TAG"

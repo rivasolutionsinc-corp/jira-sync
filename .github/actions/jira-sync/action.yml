@@ -64,6 +64,38 @@ inputs:
     description: 'Custom title for GitHub PR link'
     required: false
     default: 'GitHub PR'
+  push-branch:
+    description: 'Branch name for push events'
+    required: false
+    default: ''
+  target-branch:
+    description: 'Target branch for deployment (develop, stage, main)'
+    required: false
+    default: ''
+  transition-tag:
+    description: 'Jira transition to apply for tag/push events'
+    required: false
+    default: ''
+  deployment-stage:
+    description: 'Deployment stage (development, staging, production)'
+    required: false
+    default: ''
+  deployment-branch:
+    description: 'Deployment branch name'
+    required: false
+    default: ''
+  tag-name:
+    description: 'Tag name for tag creation events'
+    required: false
+    default: ''
+  tag-ref:
+    description: 'Tag reference for tag creation events'
+    required: false
+    default: ''
+  deployment-tag:
+    description: 'Deployment tag name'
+    required: false
+    default: ''
 
 outputs:
   jira-key:
