@@ -384,9 +384,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Apply CLI configuration so helper functions use the requested Jira target.
+    # These assignments update the module-level globals used by REST API helpers.
     JIRA_URL = args.jira_url
     JIRA_TOKEN = args.jira_token
-    globals()["PROJECT_KEY"] = args.project_key
+    PROJECT_KEY = args.project_key
 
     if args.event_name == "issues":
         if not args.issue_title or not args.issue_url:
@@ -395,6 +396,7 @@ if __name__ == "__main__":
 
         result = retry_api_call(
             lambda: create_jira_issue(
+                args.project_key,
                 args.issue_title,
                 f"GitHub issue: {args.issue_url}",
                 issue_type=args.issue_type
@@ -407,6 +409,7 @@ if __name__ == "__main__":
 
         result = retry_api_call(
             lambda: create_jira_issue(
+                args.project_key,
                 f"PR: {args.pr_branch}",
                 f"GitHub pull request: {args.pr_url}",
                 issue_type=args.issue_type
