@@ -824,11 +824,11 @@ ENTRYPOINT ["mcp-atlassian"]
 
 ### File 3: `.env`
 ```dotenv
-JIRA_URL=https://cmext.ahrq.gov/jira
-JIRA_USERNAME=Dietrich.GottfriedSchmidt@ahrq.hhs.gov
+JIRA_URL=https://jira.example.local
+JIRA_USERNAME=username@example.com
 JIRA_API_TOKEN=<REDACTED>
-CONFLUENCE_URL=https://cmext.ahrq.gov/confluence
-CONFLUENCE_USERNAME=Dietrich.GottfriedSchmidt@ahrq.hhs.gov
+CONFLUENCE_URL=https://confluence.example.local
+CONFLUENCE_USERNAME=username@example.com
 CONFLUENCE_API_TOKEN=<REDACTED>
 ```
 
