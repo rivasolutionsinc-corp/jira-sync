@@ -844,9 +844,9 @@ CONFLUENCE_API_TOKEN=<REDACTED>
   "args": [
     "compose",
     "-f",
-    "/Users/dietrichgottfriedschmidt/apps/jira-sync/docker-compose.yml",
+    "/path/to/jira-sync/docker-compose.yml",
     "--env-file",
-    "/Users/dietrichgottfriedschmidt/apps/jira-sync/.env",
+    "/path/to/jira-sync/.env",
     "run",
     "--rm",
     "-T",
