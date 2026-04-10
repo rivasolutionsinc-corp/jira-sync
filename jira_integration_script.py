@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """Jira Integration Script
 
-Refactored to use Atlassian MCP tools via mcp_client wrapper.
-Maintains backward compatibility with existing function signatures.
+Pure REST API implementation for GitHub-to-Jira synchronization.
 
 Original file: https://colab.research.google.com/drive/1vykBrsFixtw9MSv5sC6vE5wbqkvmw85b
 """
@@ -23,14 +22,6 @@ JIRA_TOKEN = os.getenv(
     os.getenv("JIRA_PERSONAL_TOKEN",
         os.getenv("JIRA_API_TOKEN", os.getenv("JIRA_PAT", "YOUR_PAT_HERE")))
 )
-
-# Import MCP client
-try:
-    from mcp_client import atlassian_mcp
-    MCP_AVAILABLE = True
-except Exception as e:
-    MCP_AVAILABLE = False
-    print(f"[WARNING] MCP client initialization failed: {e}. Falling back to REST API.")
 
 
 def create_jira_issue(project_key, summary, description, issue_type="Task"):
@@ -401,14 +392,26 @@ if __name__ == "__main__":
             print("Error: --pr-branch and --pr-url are required for pull_request events.", file=sys.stderr)
             sys.exit(1)
 
-        result = retry_api_call(
-            lambda: create_jira_issue(
-                args.project_key,
-                f"PR: {args.pr_branch}",
-                f"GitHub pull request: {args.pr_url}",
-                issue_type=args.issue_type
+        # Extract Jira key from branch name (e.g., CLOUD-1234 from feature/CLOUD-1234-description)
+        import re
+        jira_key_match = re.search(r'([A-Z][A-Z0-9_]+-\d+)', args.pr_branch)
+        
+        if jira_key_match:
+            # Found Jira key in branch name - comment on existing issue
+            jira_key = jira_key_match.group(1)
+            comment_text = f"Pull Request opened: {args.pr_url}"
+            result = retry_api_call(
+                lambda: add_comment(jira_key, comment_text)
             )
-        )
+            if result:
+                print(f"Successfully commented on {jira_key}")
+            else:
+                print(f"Failed to comment on {jira_key}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            # No Jira key in branch name - skip silently
+            print("No Jira key found in branch name. Skipping comment.")
+            sys.exit(0)
     else:
         print(f"Error: Unsupported event '{args.event_name}'. Expected 'issues' or 'pull_request'.", file=sys.stderr)
         sys.exit(1)
