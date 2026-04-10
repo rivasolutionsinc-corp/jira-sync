@@ -41,7 +41,7 @@ class MCPLifecycleClient:
                 ],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=None,
                 text=True,
                 bufsize=1
             )
