@@ -16,20 +16,12 @@ jobs:
           clean: true
           ref: ${{ github.head_ref }}
 
-      - name: Prepare action directory
-        run: |
-          if [ ! -f jira_integration_script.py ]; then
-            echo "ERROR: jira_integration_script.py not found in workspace"
-            ls -la
-            exit 1
-          fi
-          cp jira_integration_script.py .github/actions/jira-sync/
-
       - name: Run Jira Sync Action
         uses: ./.github/actions/jira-sync
         with:
           jira-url: 'https://cmext.ahrq.gov/jira'
-          jira-token: ${{ secrets.JIRA_TOKEN }}
+          jira-username: ${{ secrets.JIRA_USERNAME }}
+          jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
           project-key: 'CLOUD'
           event-name: ${{ github.event_name }}
           issue-title: ${{ github.event.issue.title }}

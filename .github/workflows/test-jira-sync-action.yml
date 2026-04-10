@@ -19,14 +19,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare action directory
-        run: cp jira_integration_script.py .github/actions/jira-sync/
-
       - name: Test Jira Sync Action
         uses: ./.github/actions/jira-sync
         with:
           jira-url: 'https://cmext.ahrq.gov/jira'
-          jira-token: ${{ secrets.JIRA_TOKEN }}
+          jira-username: ${{ secrets.JIRA_USERNAME }}
+          jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
           project-key: 'CLOUD'
           event-name: ${{ github.event.inputs.event_type || github.event_name }}
           issue-title: 'Test Issue from Action'
