@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """Jira Integration Script
 
-Refactored to use Atlassian MCP tools via mcp_client wrapper.
-Maintains backward compatibility with existing function signatures.
+Pure REST API implementation for GitHub-to-Jira synchronization.
 
 Original file: https://colab.research.google.com/drive/1vykBrsFixtw9MSv5sC6vE5wbqkvmw85b
 """
@@ -23,14 +22,6 @@ JIRA_TOKEN = os.getenv(
     os.getenv("JIRA_PERSONAL_TOKEN",
         os.getenv("JIRA_API_TOKEN", os.getenv("JIRA_PAT", "YOUR_PAT_HERE")))
 )
-
-# Import MCP client
-try:
-    from mcp_client import atlassian_mcp
-    MCP_AVAILABLE = True
-except Exception as e:
-    MCP_AVAILABLE = False
-    print(f"[WARNING] MCP client initialization failed: {e}. Falling back to REST API.")
 
 
 def create_jira_issue(project_key, summary, description, issue_type="Task"):
