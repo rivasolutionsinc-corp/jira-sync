@@ -324,8 +324,12 @@ def main():
         print(f"\n✓ Jira sync completed successfully.")
         github_output = os.environ.get("GITHUB_OUTPUT", "")
         if github_output:
-            with open(github_output, "a") as f:
-                f.write(f"jira-key={issue_key}\n")
+            try:
+                with open(github_output, "a") as f:
+                    f.write(f"jira-key={issue_key}\n")
+            except OSError as e:
+                print(f"✗ Failed to write to GITHUB_OUTPUT: {e}", file=sys.stderr)
+                sys.exit(1)
         else:
             # Fallback for local testing outside a GitHub Actions runner
             print(f"jira-key={issue_key}")
