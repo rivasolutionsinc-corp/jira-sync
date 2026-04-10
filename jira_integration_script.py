@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Jira Integration Script - Phase 1: Generalized Python Toolset
+"""Jira Integration Script - Phase 2: Production-Ready REST API
 
 Pure REST API implementation for GitHub-to-Jira synchronization.
-Removes project-specific hardcoding and enables configurable event routing.
+Removes all MCP code and implements production hardening with validation,
+rate limiting, retry logic, and comprehensive error handling.
 
 Original file: https://colab.research.google.com/drive/1vykBrsFixtw9MSv5sC6vE5wbqkvmw85b
 Phase 1 (CLOUD-1959): Generalize CLI arguments and event routing
+Phase 2 (CLOUD-1961): Remove MCP code and production hardening
 """
 
 import requests
@@ -16,14 +18,8 @@ import time
 import re
 import argparse
 from datetime import datetime
-
-# MCP Availability Check
-try:
-    import atlassian_mcp
-    MCP_AVAILABLE = True
-except ImportError:
-    MCP_AVAILABLE = False
-    atlassian_mcp = None
+from typing import Optional, Dict, Any, List, Tuple
+from urllib.parse import urljoin
 
 # Configuration - Use environment variables for security
 JIRA_URL = os.getenv("JIRA_URL", "https://cmext.ahrq.gov/jira")
@@ -33,8 +29,38 @@ JIRA_TOKEN = os.getenv(
         os.getenv("JIRA_API_TOKEN", os.getenv("JIRA_PAT", "YOUR_PAT_HERE")))
 )
 
+# Production hardening constants
+DEFAULT_TIMEOUT = 30
+MAX_RETRIES = 3
+BACKOFF_FACTOR = 2
+RATE_LIMIT_DELAY = 0.5  # seconds between API calls
+MAX_COMMENT_LENGTH = 32767  # Jira API limit
+
+# Request session with connection pooling
+_session = None
+
+def get_session() -> requests.Session:
+    """Get or create a requests session with connection pooling."""
+    global _session
+    if _session is None:
+        _session = requests.Session()
+        # Configure connection pooling
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=10,
+            max_retries=requests.adapters.Retry(
+                total=MAX_RETRIES,
+                backoff_factor=BACKOFF_FACTOR,
+                status_forcelist=[429, 500, 502, 503, 504]
+            )
+        )
+        _session.mount('http://', adapter)
+        _session.mount('https://', adapter)
+    return _session
+
+
 # Structured Logging Utility
-def log_action(action, level="INFO", **kwargs):
+def log_action(action: str, level: str = "INFO", **kwargs) -> None:
     """Structured logging for Jira actions.
     
     Args:
@@ -49,29 +75,107 @@ def log_action(action, level="INFO", **kwargs):
     print(message)
 
 
-def create_jira_issue(project_key, summary, description, issue_type="Task"):
-    """Creates a new Jira issue via Atlassian MCP or REST API."""
-    if MCP_AVAILABLE:
-        try:
-            result = atlassian_mcp.jira_create_issue(
-                project_key=project_key,
-                summary=summary,
-                description=description,
-                issue_type=issue_type
-            )
-            # Parse issue key from MCP response
-            match = re.search(r'([A-Z]+-\d+)', result)
-            if match:
-                issue_key = match.group(1)
-                print(f"Successfully created issue: {issue_key}")
-                return issue_key
-            else:
-                print(f"Failed to parse issue key from response: {result}")
-                return None
-        except Exception as e:
-            print(f"[WARNING] MCP call failed: {e}. Falling back to REST API.")
+def validate_jira_url(url: str) -> bool:
+    """Validate Jira URL format.
     
-    # Fallback to direct REST API
+    Args:
+        url (str): Jira URL to validate
+    
+    Returns:
+        bool: True if valid, False otherwise
+    """
+    if not url or not isinstance(url, str):
+        return False
+    return url.startswith(('http://', 'https://')) and len(url) > 10
+
+
+def validate_jira_token(token: str) -> bool:
+    """Validate Jira API token format.
+    
+    Args:
+        token (str): Jira API token to validate
+    
+    Returns:
+        bool: True if valid, False otherwise
+    """
+    if not token or token == "YOUR_PAT_HERE":
+        return False
+    return len(token) > 10
+
+
+def validate_issue_key(issue_key: str) -> bool:
+    """Validate Jira issue key format.
+    
+    Args:
+        issue_key (str): Issue key to validate (e.g., 'CLOUD-1234')
+    
+    Returns:
+        bool: True if valid, False otherwise
+    """
+    if not issue_key or not isinstance(issue_key, str):
+        return False
+    return bool(re.match(r'^[A-Z][A-Z0-9_]+-\d+$', issue_key))
+
+
+def validate_project_key(project_key: str) -> bool:
+    """Validate Jira project key format.
+    
+    Args:
+        project_key (str): Project key to validate (e.g., 'CLOUD')
+    
+    Returns:
+        bool: True if valid, False otherwise
+    """
+    if not project_key or not isinstance(project_key, str):
+        return False
+    return bool(re.match(r'^[A-Z][A-Z0-9_]*$', project_key))
+
+
+def validate_url(url: str) -> bool:
+    """Validate URL format.
+    
+    Args:
+        url (str): URL to validate
+    
+    Returns:
+        bool: True if valid, False otherwise
+    """
+    if not url or not isinstance(url, str):
+        return False
+    return url.startswith(('http://', 'https://')) and len(url) > 10
+
+
+def rate_limit_delay() -> None:
+    """Apply rate limiting delay between API calls."""
+    time.sleep(RATE_LIMIT_DELAY)
+
+
+def create_jira_issue(project_key: str, summary: str, description: str, 
+                     issue_type: str = "Task") -> Optional[str]:
+    """Creates a new Jira issue via REST API.
+    
+    Args:
+        project_key (str): Jira project key
+        summary (str): Issue summary/title
+        description (str): Issue description
+        issue_type (str): Jira issue type (default: Task)
+    
+    Returns:
+        str: Created issue key on success, None on failure
+    """
+    # Validate inputs
+    if not validate_project_key(project_key):
+        log_action("Invalid project key", level="ERROR", project_key=project_key)
+        return None
+    
+    if not summary or len(summary) > 255:
+        log_action("Invalid summary", level="ERROR", length=len(summary) if summary else 0)
+        return None
+    
+    if not description or len(description) > 32767:
+        log_action("Invalid description", level="ERROR", length=len(description) if description else 0)
+        return None
+    
     url = f"{JIRA_URL}/rest/api/2/issue"
     headers = {
         "Authorization": f"Bearer {JIRA_TOKEN}",
@@ -87,30 +191,48 @@ def create_jira_issue(project_key, summary, description, issue_type="Task"):
         }
     }
     
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
-    
-    if response.status_code == 201:
-        print(f"Successfully created issue: {response.json()['key']}")
-        return response.json()['key']
-    else:
-        print(f"Failed to create issue. HTTP {response.status_code}: Unable to create issue in Jira. Check project key and issue type.")
+    try:
+        rate_limit_delay()
+        response = get_session().post(url, headers=headers, json=payload, timeout=DEFAULT_TIMEOUT)
+        
+        if response.status_code == 201:
+            issue_key = response.json()['key']
+            log_action(f"Successfully created issue: {issue_key}", level="INFO")
+            return issue_key
+        else:
+            log_action(f"Failed to create issue", level="ERROR",
+                      http_status=response.status_code, response=response.text[:200])
+            return None
+    except requests.exceptions.Timeout:
+        log_action("Request timeout while creating issue", level="ERROR", timeout=DEFAULT_TIMEOUT)
+        return None
+    except requests.exceptions.RequestException as e:
+        log_action("Request failed while creating issue", level="ERROR", error=str(e))
+        return None
+    except Exception as e:
+        log_action("Unexpected error while creating issue", level="ERROR", error=str(e))
         return None
 
 
-def add_comment(issue_key, comment_body):
-    """Adds a comment to an existing Jira issue via Atlassian MCP or REST API."""
-    if MCP_AVAILABLE:
-        try:
-            result = atlassian_mcp.jira_add_comment(
-                issue_key=issue_key,
-                comment=comment_body
-            )
-            print(f"Successfully added comment to {issue_key}")
-            return True
-        except Exception as e:
-            print(f"[WARNING] MCP call failed: {e}. Falling back to REST API.")
+def add_comment(issue_key: str, comment_body: str) -> bool:
+    """Adds a comment to an existing Jira issue via REST API.
     
-    # Fallback to direct REST API
+    Args:
+        issue_key (str): Jira issue key
+        comment_body (str): Comment text
+    
+    Returns:
+        bool: True on success, False on failure
+    """
+    # Validate inputs
+    if not validate_issue_key(issue_key):
+        log_action("Invalid issue key", level="ERROR", issue_key=issue_key)
+        return False
+    
+    if not comment_body or len(comment_body) > MAX_COMMENT_LENGTH:
+        log_action("Invalid comment body", level="ERROR", length=len(comment_body) if comment_body else 0)
+        return False
+    
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/comment"
     headers = {
         "Authorization": f"Bearer {JIRA_TOKEN}",
@@ -119,42 +241,42 @@ def add_comment(issue_key, comment_body):
     }
     payload = {"body": comment_body}
     
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
-    
-    if response.status_code == 201:
-        print(f"Successfully added comment to {issue_key}")
-        return True
-    else:
-        print(f"Failed to add comment. HTTP {response.status_code}: Unable to add comment to issue. Check issue key and permissions.")
+    try:
+        rate_limit_delay()
+        response = get_session().post(url, headers=headers, json=payload, timeout=DEFAULT_TIMEOUT)
+        
+        if response.status_code == 201:
+            log_action(f"Successfully added comment to {issue_key}", level="INFO")
+            return True
+        else:
+            log_action(f"Failed to add comment", level="ERROR",
+                      http_status=response.status_code, response=response.text[:200])
+            return False
+    except requests.exceptions.Timeout:
+        log_action("Request timeout while adding comment", level="ERROR", timeout=DEFAULT_TIMEOUT)
+        return False
+    except requests.exceptions.RequestException as e:
+        log_action("Request failed while adding comment", level="ERROR", error=str(e))
+        return False
+    except Exception as e:
+        log_action("Unexpected error while adding comment", level="ERROR", error=str(e))
         return False
 
 
-def get_issue_details(issue_key):
-    """Retrieves details of a Jira issue via Atlassian MCP or REST API."""
-    if MCP_AVAILABLE:
-        try:
-            result = atlassian_mcp.jira_get_issue(issue_key=issue_key)
-            # MCP returns JSON string, parse it
-            if isinstance(result, str):
-                issue_data = json.loads(result)
-            else:
-                issue_data = result
-            
-            return {
-                "key": issue_data.get("key"),
-                "summary": issue_data.get("summary"),
-                "description": issue_data.get("description"),
-                "status": issue_data.get("status"),
-                "assignee": issue_data.get("assignee"),
-                "created": issue_data.get("created"),
-                "updated": issue_data.get("updated"),
-                "issue_type": issue_data.get("issue_type"),
-                "priority": issue_data.get("priority")
-            }
-        except Exception as e:
-            print(f"[WARNING] MCP call failed: {e}. Falling back to REST API.")
+def get_issue_details(issue_key: str) -> Optional[Dict[str, Any]]:
+    """Retrieves details of a Jira issue via REST API.
     
-    # Fallback to direct REST API
+    Args:
+        issue_key (str): Jira issue key
+    
+    Returns:
+        dict: Issue details on success, None on failure
+    """
+    # Validate input
+    if not validate_issue_key(issue_key):
+        log_action("Invalid issue key", level="ERROR", issue_key=issue_key)
+        return None
+    
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}"
     headers = {
         "Authorization": f"Bearer {JIRA_TOKEN}",
@@ -162,28 +284,40 @@ def get_issue_details(issue_key):
         "Accept": "application/json"
     }
     
-    response = requests.get(url, headers=headers)
-    
-    if response.status_code == 200:
-        issue_data = response.json()
-        return {
-            "key": issue_data.get("key"),
-            "summary": issue_data.get("fields", {}).get("summary"),
-            "description": issue_data.get("fields", {}).get("description"),
-            "status": issue_data.get("fields", {}).get("status", {}).get("name"),
-            "assignee": issue_data.get("fields", {}).get("assignee", {}).get("displayName"),
-            "created": issue_data.get("fields", {}).get("created"),
-            "updated": issue_data.get("fields", {}).get("updated"),
-            "issue_type": issue_data.get("fields", {}).get("issuetype", {}).get("name"),
-            "priority": issue_data.get("fields", {}).get("priority", {}).get("name")
-        }
-    else:
-        print(f"Failed to get issue details. HTTP {response.status_code}: Unable to retrieve issue. Check issue key and permissions.")
+    try:
+        rate_limit_delay()
+        response = get_session().get(url, headers=headers, timeout=DEFAULT_TIMEOUT)
+        
+        if response.status_code == 200:
+            issue_data = response.json()
+            return {
+                "key": issue_data.get("key"),
+                "summary": issue_data.get("fields", {}).get("summary"),
+                "description": issue_data.get("fields", {}).get("description"),
+                "status": issue_data.get("fields", {}).get("status", {}).get("name"),
+                "assignee": issue_data.get("fields", {}).get("assignee", {}).get("displayName"),
+                "created": issue_data.get("fields", {}).get("created"),
+                "updated": issue_data.get("fields", {}).get("updated"),
+                "issue_type": issue_data.get("fields", {}).get("issuetype", {}).get("name"),
+                "priority": issue_data.get("fields", {}).get("priority", {}).get("name")
+            }
+        else:
+            log_action(f"Failed to get issue details", level="ERROR",
+                      http_status=response.status_code, response=response.text[:200])
+            return None
+    except requests.exceptions.Timeout:
+        log_action("Request timeout while getting issue details", level="ERROR", timeout=DEFAULT_TIMEOUT)
+        return None
+    except requests.exceptions.RequestException as e:
+        log_action("Request failed while getting issue details", level="ERROR", error=str(e))
+        return None
+    except Exception as e:
+        log_action("Unexpected error while getting issue details", level="ERROR", error=str(e))
         return None
 
 
-def change_issue_status(issue_key, transition_name):
-    """Changes the status of a Jira issue by transitioning it via Atlassian MCP or REST API.
+def change_issue_status(issue_key: str, transition_name: str) -> bool:
+    """Changes the status of a Jira issue by transitioning it via REST API.
     
     Enhanced with transition discovery logging for debugging.
     
@@ -194,23 +328,15 @@ def change_issue_status(issue_key, transition_name):
     Returns:
         bool: True on success, False on failure
     """
-    if MCP_AVAILABLE:
-        try:
-            result = atlassian_mcp.jira_transition_issue(
-                issue_key=issue_key,
-                transition_name=transition_name
-            )
-            # Check if transition was successful
-            if "Successfully transitioned" in result or "successfully" in result.lower():
-                log_action(f"Successfully transitioned {issue_key}", level="INFO", transition=transition_name)
-                return True
-            else:
-                log_action(f"Failed to transition {issue_key}", level="ERROR", result=result)
-                return False
-        except Exception as e:
-            log_action(f"MCP call failed, falling back to REST API", level="WARNING", error=str(e))
+    # Validate inputs
+    if not validate_issue_key(issue_key):
+        log_action("Invalid issue key", level="ERROR", issue_key=issue_key)
+        return False
     
-    # Fallback to direct REST API
+    if not transition_name or not isinstance(transition_name, str):
+        log_action("Invalid transition name", level="ERROR", transition_name=transition_name)
+        return False
+    
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/transitions"
     headers = {
         "Authorization": f"Bearer {JIRA_TOKEN}",
@@ -218,63 +344,76 @@ def change_issue_status(issue_key, transition_name):
         "Accept": "application/json"
     }
     
-    # Fetch available transitions
-    response = requests.get(url, headers=headers)
-    
-    if response.status_code != 200:
-        log_action(f"Failed to get transitions for {issue_key}", level="ERROR",
-                   http_status=response.status_code, response=response.text[:200])
-        return False
-    
-    transitions = response.json().get("transitions", [])
-    
-    # Log all available transitions for debugging
-    log_action(f"Transition discovery for {issue_key}", level="DEBUG",
-               available_count=len(transitions))
-    for transition in transitions:
-        log_action(f"  Available transition", level="DEBUG",
-                   id=transition.get("id"),
-                   name=transition.get("name"),
-                   to_status=transition.get("to", {}).get("name"))
-    
-    # Find the transition ID matching the transition name
-    transition_id = None
-    for transition in transitions:
-        if transition.get("name").lower() == transition_name.lower():
-            transition_id = transition.get("id")
-            break
-    
-    if not transition_id:
-        # Provide helpful suggestions
-        available_names = [t.get("name") for t in transitions]
-        log_action(f"Transition '{transition_name}' not found for {issue_key}", level="ERROR",
-                   requested=transition_name, available=", ".join(available_names))
-        print(f"Transition '{transition_name}' not found. Available transitions:")
+    try:
+        # Fetch available transitions
+        rate_limit_delay()
+        response = get_session().get(url, headers=headers, timeout=DEFAULT_TIMEOUT)
+        
+        if response.status_code != 200:
+            log_action(f"Failed to get transitions for {issue_key}", level="ERROR",
+                      http_status=response.status_code, response=response.text[:200])
+            return False
+        
+        transitions = response.json().get("transitions", [])
+        
+        # Log all available transitions for debugging
+        log_action(f"Transition discovery for {issue_key}", level="DEBUG",
+                  available_count=len(transitions))
         for transition in transitions:
-            print(f"  - {transition.get('name')} (ID: {transition.get('id')})")
-        return False
-    
-    # Perform the transition
-    payload = {
-        "transition": {
-            "id": transition_id
+            log_action(f"  Available transition", level="DEBUG",
+                      id=transition.get("id"),
+                      name=transition.get("name"),
+                      to_status=transition.get("to", {}).get("name"))
+        
+        # Find the transition ID matching the transition name
+        transition_id = None
+        for transition in transitions:
+            if transition.get("name", "").lower() == transition_name.lower():
+                transition_id = transition.get("id")
+                break
+        
+        if not transition_id:
+            # Provide helpful suggestions
+            available_names = [t.get("name") for t in transitions]
+            log_action(f"Transition '{transition_name}' not found for {issue_key}", level="ERROR",
+                      requested=transition_name, available=", ".join(available_names))
+            print(f"Transition '{transition_name}' not found. Available transitions:")
+            for transition in transitions:
+                print(f"  - {transition.get('name')} (ID: {transition.get('id')})")
+            return False
+        
+        # Perform the transition
+        payload = {
+            "transition": {
+                "id": transition_id
+            }
         }
-    }
-    
-    log_action(f"Attempting transition for {issue_key}", level="DEBUG",
-               transition_id=transition_id, transition_name=transition_name)
-    
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
-    
-    if response.status_code == 204:
-        log_action(f"Successfully transitioned {issue_key} to '{transition_name}'", level="INFO")
-        return True
-    else:
-        log_action(f"Failed to transition {issue_key}", level="ERROR",
-                   http_status=response.status_code, response=response.text[:200])
+        
+        log_action(f"Attempting transition for {issue_key}", level="DEBUG",
+                  transition_id=transition_id, transition_name=transition_name)
+        
+        rate_limit_delay()
+        response = get_session().post(url, headers=headers, json=payload, timeout=DEFAULT_TIMEOUT)
+        
+        if response.status_code == 204:
+            log_action(f"Successfully transitioned {issue_key} to '{transition_name}'", level="INFO")
+            return True
+        else:
+            log_action(f"Failed to transition {issue_key}", level="ERROR",
+                      http_status=response.status_code, response=response.text[:200])
+            return False
+    except requests.exceptions.Timeout:
+        log_action("Request timeout while transitioning issue", level="ERROR", timeout=DEFAULT_TIMEOUT)
+        return False
+    except requests.exceptions.RequestException as e:
+        log_action("Request failed while transitioning issue", level="ERROR", error=str(e))
+        return False
+    except Exception as e:
+        log_action("Unexpected error while transitioning issue", level="ERROR", error=str(e))
         return False
 
-def link_github_pr_remote(issue_key, pr_url, pr_title):
+
+def link_github_pr_remote(issue_key: str, pr_url: str, pr_title: str) -> bool:
     """Creates a GitHub PR remote link in Jira.
     
     This creates a "Web Link" that appears in the Jira "Issue Links" panel
@@ -288,6 +427,19 @@ def link_github_pr_remote(issue_key, pr_url, pr_title):
     Returns:
         bool: True on success, False on failure
     """
+    # Validate inputs
+    if not validate_issue_key(issue_key):
+        log_action("Invalid issue key", level="ERROR", issue_key=issue_key)
+        return False
+    
+    if not validate_url(pr_url):
+        log_action("Invalid PR URL", level="ERROR", pr_url=pr_url)
+        return False
+    
+    if not pr_title or len(pr_title) > 255:
+        log_action("Invalid PR title", level="ERROR", length=len(pr_title) if pr_title else 0)
+        return False
+    
     try:
         # Extract PR number from URL for globalId
         pr_match = re.search(r'/pull/(\d+)', pr_url)
@@ -319,26 +471,34 @@ def link_github_pr_remote(issue_key, pr_url, pr_title):
         }
         
         log_action(f"Creating GitHub PR remote link for {issue_key}", level="DEBUG",
-                   pr_url=pr_url, pr_number=pr_number)
+                  pr_url=pr_url, pr_number=pr_number)
         
-        response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=30)
+        rate_limit_delay()
+        response = get_session().post(url, headers=headers, json=payload, timeout=DEFAULT_TIMEOUT)
         
         # Accept both 200 and 201 as success (Jira may return either)
         if response.status_code in [200, 201]:
             log_action(f"Successfully linked GitHub PR to {issue_key}", level="INFO",
-                       pr_url=pr_url)
+                      pr_url=pr_url)
             return True
         else:
             log_action(f"Failed to link GitHub PR to {issue_key}", level="ERROR",
-                       http_status=response.status_code, response=response.text[:200])
+                      http_status=response.status_code, response=response.text[:200])
             return False
+    except requests.exceptions.Timeout:
+        log_action("Request timeout while linking PR", level="ERROR", timeout=DEFAULT_TIMEOUT)
+        return False
+    except requests.exceptions.RequestException as e:
+        log_action("Request failed while linking PR", level="ERROR", error=str(e))
+        return False
     except Exception as e:
-        log_action(f"Failed to link GitHub PR due to exception", level="ERROR",
-                   issue_key=issue_key, error=str(e))
+        log_action("Failed to link GitHub PR due to exception", level="ERROR",
+                  issue_key=issue_key, error=str(e))
         return False
 
-def create_jira_subtask(parent_key, summary, description):
-    """Creates a Jira subtask linked to a parent issue via Atlassian MCP or REST API.
+
+def create_jira_subtask(parent_key: str, summary: str, description: str) -> Optional[str]:
+    """Creates a Jira subtask linked to a parent issue via REST API.
     
     Args:
         parent_key (str): Parent issue key (e.g., 'AQD-1234')
@@ -348,35 +508,24 @@ def create_jira_subtask(parent_key, summary, description):
     Returns:
         str: Subtask key on success, None on failure
     """
+    # Validate inputs
+    if not validate_issue_key(parent_key):
+        log_action("Invalid parent issue key", level="ERROR", parent_key=parent_key)
+        return None
+    
+    if not summary or len(summary) > 255:
+        log_action("Invalid summary", level="ERROR", length=len(summary) if summary else 0)
+        return None
+    
+    if not description or len(description) > 32767:
+        log_action("Invalid description", level="ERROR", length=len(description) if description else 0)
+        return None
+    
     log_action(f"Creating Jira subtask for parent: {parent_key}", level="DEBUG",
-               summary=summary)
+              summary=summary)
     
     project_key = parent_key.split('-')[0]
     
-    if MCP_AVAILABLE:
-        try:
-            result = atlassian_mcp.jira_create_issue(
-                project_key=project_key,
-                summary=summary,
-                description=description,
-                issue_type="Sub-task"
-            )
-            # Parse subtask key from response
-            match = re.search(r'([A-Z]+-\d+)', result)
-            if match:
-                subtask_key = match.group(1)
-                log_action(f"Successfully created subtask: {subtask_key}", level="INFO",
-                           parent=parent_key)
-                return subtask_key
-            else:
-                log_action(f"Failed to parse subtask key from MCP response", level="ERROR",
-                           response=result[:200])
-                return None
-        except Exception as e:
-            log_action(f"MCP call failed, falling back to REST API", level="WARNING",
-                       error=str(e))
-    
-    # Fallback to direct REST API
     url = f"{JIRA_URL}/rest/api/2/issue"
     headers = {
         "Authorization": f"Bearer {JIRA_TOKEN}",
@@ -394,26 +543,35 @@ def create_jira_subtask(parent_key, summary, description):
         }
     }
     
-    log_action(f"Creating subtask via REST API", level="DEBUG",
-               parent=parent_key, project=project_key)
-    
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
-    
-    if response.status_code == 201:
-        subtask_key = response.json()['key']
-        log_action(f"Successfully created subtask: {subtask_key}", level="INFO",
-                   parent=parent_key)
-        return subtask_key
-    else:
-        log_action(f"Failed to create subtask", level="ERROR",
-                   http_status=response.status_code, response=response.text[:200])
+    try:
+        log_action(f"Creating subtask via REST API", level="DEBUG",
+                  parent=parent_key, project=project_key)
+        
+        rate_limit_delay()
+        response = get_session().post(url, headers=headers, json=payload, timeout=DEFAULT_TIMEOUT)
+        
+        if response.status_code == 201:
+            subtask_key = response.json()['key']
+            log_action(f"Successfully created subtask: {subtask_key}", level="INFO",
+                      parent=parent_key)
+            return subtask_key
+        else:
+            log_action(f"Failed to create subtask", level="ERROR",
+                      http_status=response.status_code, response=response.text[:200])
+            return None
+    except requests.exceptions.Timeout:
+        log_action("Request timeout while creating subtask", level="ERROR", timeout=DEFAULT_TIMEOUT)
+        return None
+    except requests.exceptions.RequestException as e:
+        log_action("Request failed while creating subtask", level="ERROR", error=str(e))
+        return None
+    except Exception as e:
+        log_action("Unexpected error while creating subtask", level="ERROR", error=str(e))
         return None
 
-def link_jira_issues(issue_key1, issue_key2, link_type="relates to"):
-    """Links two Jira issues together.
-    
-    NOTE: Atlassian MCP does not provide a tool for linking issues.
-    This function uses direct REST API access as a fallback.
+
+def link_jira_issues(issue_key1: str, issue_key2: str, link_type: str = "relates to") -> bool:
+    """Links two Jira issues together via REST API.
     
     Args:
         issue_key1 (str): First issue key (e.g., 'AQD-1234')
@@ -423,6 +581,19 @@ def link_jira_issues(issue_key1, issue_key2, link_type="relates to"):
     Returns:
         bool: True on success, False on failure
     """
+    # Validate inputs
+    if not validate_issue_key(issue_key1):
+        log_action("Invalid first issue key", level="ERROR", issue_key=issue_key1)
+        return False
+    
+    if not validate_issue_key(issue_key2):
+        log_action("Invalid second issue key", level="ERROR", issue_key=issue_key2)
+        return False
+    
+    if not link_type or not isinstance(link_type, str):
+        log_action("Invalid link type", level="ERROR", link_type=link_type)
+        return False
+    
     log_action(f"Linking issues: {issue_key1} {link_type} {issue_key2}", level="DEBUG")
     
     try:
@@ -439,25 +610,31 @@ def link_jira_issues(issue_key1, issue_key2, link_type="relates to"):
             "outwardIssue": {"key": issue_key2}
         }
         
-        response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=30)
+        rate_limit_delay()
+        response = get_session().post(url, headers=headers, json=payload, timeout=DEFAULT_TIMEOUT)
         
         if response.status_code == 201:
             log_action(f"Successfully linked issues", level="INFO",
-                       issue1=issue_key1, issue2=issue_key2, link_type=link_type)
+                      issue1=issue_key1, issue2=issue_key2, link_type=link_type)
             return True
         else:
             log_action(f"Failed to link issues", level="ERROR",
-                       http_status=response.status_code, response=response.text[:200])
+                      http_status=response.status_code, response=response.text[:200])
             return False
+    except requests.exceptions.Timeout:
+        log_action("Request timeout while linking issues", level="ERROR", timeout=DEFAULT_TIMEOUT)
+        return False
+    except requests.exceptions.RequestException as e:
+        log_action("Request failed while linking issues", level="ERROR", error=str(e))
+        return False
     except Exception as e:
-        log_action(f"Failed to link issues due to exception", level="ERROR",
-                   error_type=type(e).__name__, error=str(e))
+        log_action("Failed to link issues due to exception", level="ERROR",
+                  error_type=type(e).__name__, error=str(e))
         return False
 
-def retry_api_call(func, max_retries=3, backoff_factor=2):
+
+def retry_api_call(func, max_retries: int = MAX_RETRIES, backoff_factor: int = BACKOFF_FACTOR) -> Any:
     """Retry wrapper for Jira API calls with exponential backoff.
-    
-    Works with both REST API and MCP tool calls.
     
     Args:
         func (callable): Function to retry
@@ -471,18 +648,19 @@ def retry_api_call(func, max_retries=3, backoff_factor=2):
     
     for attempt in range(max_retries):
         try:
-            print(f"[{timestamp}] Attempt {attempt + 1}/{max_retries}")
+            log_action(f"Attempt {attempt + 1}/{max_retries}", level="DEBUG")
             return func()
         except (requests.exceptions.RequestException, Exception) as e:
             if attempt == max_retries - 1:
-                print(f"[{timestamp}] Failed after {max_retries} attempts: {e}")
+                log_action(f"Failed after {max_retries} attempts", level="ERROR", error=str(e))
                 return None
             wait_time = backoff_factor ** attempt
-            print(f"[{timestamp}] Attempt {attempt + 1} failed. Retrying in {wait_time}s...")
+            log_action(f"Attempt {attempt + 1} failed. Retrying in {wait_time}s...", level="WARNING",
+                      error=str(e))
             time.sleep(wait_time)
 
 
-def extract_jira_key_from_branch(branch_name):
+def extract_jira_key_from_branch(branch_name: str) -> Optional[str]:
     """Extracts Jira issue key from branch name.
     
     Supports patterns like:
@@ -496,11 +674,14 @@ def extract_jira_key_from_branch(branch_name):
     Returns:
         str: Jira issue key (e.g., 'CLOUD-1234') or None if not found
     """
+    if not branch_name or not isinstance(branch_name, str):
+        return None
+    
     match = re.search(r'([A-Z][A-Z0-9_]+-\d+)', branch_name)
     return match.group(1) if match else None
 
 
-def route_event(event_name, args):
+def route_event(event_name: str, args) -> Any:
     """Routes GitHub events to appropriate Jira actions based on configuration.
     
     Supports configurable event routing with transition names and branch matching.
@@ -513,7 +694,7 @@ def route_event(event_name, args):
         Any: Result of the routed action
     """
     log_action(f"Routing event", level="DEBUG", event_name=event_name, 
-               target_branch=args.target_branch)
+              target_branch=args.target_branch)
     
     if event_name == "issues":
         return handle_issues_event(args)
@@ -527,7 +708,7 @@ def route_event(event_name, args):
         return None
 
 
-def handle_issues_event(args):
+def handle_issues_event(args) -> Optional[str]:
     """Handles GitHub issues event.
     
     Creates a new Jira issue when a GitHub issue is opened.
@@ -543,7 +724,7 @@ def handle_issues_event(args):
         return None
     
     log_action(f"Handling issues event", level="DEBUG", 
-               title=args.issue_title, url=args.issue_url)
+              title=args.issue_title, url=args.issue_url)
     
     result = retry_api_call(
         lambda: create_jira_issue(
@@ -557,7 +738,7 @@ def handle_issues_event(args):
     return result
 
 
-def handle_pull_request_event(args):
+def handle_pull_request_event(args) -> bool:
     """Handles GitHub pull_request event.
     
     Supports multiple PR actions:
@@ -576,19 +757,19 @@ def handle_pull_request_event(args):
         return False
     
     log_action(f"Handling pull_request event", level="DEBUG",
-               branch=args.pr_branch, url=args.pr_url, pr_action=args.pr_action)
+              branch=args.pr_branch, url=args.pr_url, pr_action=args.pr_action)
     
     # Extract Jira key from branch name
     jira_key = extract_jira_key_from_branch(args.pr_branch)
     
     if not jira_key:
         log_action(f"No Jira key found in branch name", level="INFO",
-                   branch=args.pr_branch)
+                  branch=args.pr_branch)
         print("No Jira key found in branch name. Skipping PR sync.")
         return True  # Not an error, just skip
     
     log_action(f"Found Jira key in branch", level="DEBUG",
-               jira_key=jira_key, branch=args.pr_branch)
+              jira_key=jira_key, branch=args.pr_branch)
     
     success = True
     
@@ -637,7 +818,7 @@ def handle_pull_request_event(args):
     return success
 
 
-def handle_push_event(args):
+def handle_push_event(args) -> bool:
     """Handles GitHub push event.
     
     Supports tagging issues when commits are pushed to specific branches.
@@ -653,12 +834,12 @@ def handle_push_event(args):
         return False
     
     log_action(f"Handling push event", level="DEBUG",
-               branch=args.push_branch, target_branch=args.target_branch)
+              branch=args.push_branch, target_branch=args.target_branch)
     
     # Check if push branch matches target branch
     if args.target_branch and args.push_branch != args.target_branch:
         log_action(f"Push branch does not match target branch", level="INFO",
-                   push_branch=args.push_branch, target_branch=args.target_branch)
+                  push_branch=args.push_branch, target_branch=args.target_branch)
         print(f"Push to {args.push_branch} does not match target branch {args.target_branch}. Skipping.")
         return True  # Not an error, just skip
     
@@ -667,12 +848,12 @@ def handle_push_event(args):
     
     if not jira_key:
         log_action(f"No Jira key found in branch name", level="INFO",
-                   branch=args.push_branch)
+                  branch=args.push_branch)
         print("No Jira key found in branch name. Skipping push sync.")
         return True  # Not an error, just skip
     
     log_action(f"Found Jira key in branch", level="DEBUG",
-               jira_key=jira_key, branch=args.push_branch)
+              jira_key=jira_key, branch=args.push_branch)
     
     # Transition issue if configured
     if args.transition_tag:
@@ -686,7 +867,7 @@ def handle_push_event(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Jira Integration Script for GitHub-to-Jira sync (Phase 1: Generalized)",
+        description="Jira Integration Script for GitHub-to-Jira sync (Phase 2: Production-Ready REST API)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -767,6 +948,19 @@ Examples:
                        help="Custom title for GitHub PR links (default: 'GitHub PR')")
     
     args = parser.parse_args()
+
+    # Validate critical configuration
+    if not validate_jira_url(args.jira_url):
+        print("Error: Invalid Jira URL. Must start with http:// or https://", file=sys.stderr)
+        sys.exit(1)
+    
+    if not validate_jira_token(args.jira_token):
+        print("Error: Invalid Jira API token. Token is required and must not be placeholder.", file=sys.stderr)
+        sys.exit(1)
+    
+    if not validate_project_key(args.project_key):
+        print("Error: Invalid Jira project key. Must be uppercase alphanumeric.", file=sys.stderr)
+        sys.exit(1)
 
     # Apply CLI configuration so helper functions use the requested Jira target.
     # These assignments update the module-level globals used by REST API helpers.
