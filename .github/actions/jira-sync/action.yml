@@ -50,3 +50,10 @@ runs:
     JIRA_URL: ${{ inputs.jira-url }}
     JIRA_USERNAME: ${{ inputs.jira-username }}
     JIRA_API_TOKEN: ${{ inputs.jira-api-token }}
+    PROJECT_KEY: ${{ inputs.project-key }}
+    EVENT_NAME: ${{ inputs.event-name }}
+    ISSUE_TITLE: ${{ inputs.issue-title }}
+    ISSUE_URL: ${{ inputs.issue-url }}
+    PR_BRANCH: ${{ inputs.pr-branch }}
+    PR_URL: ${{ inputs.pr-url }}
+    ISSUE_TYPE: ${{ inputs.issue-type }}
