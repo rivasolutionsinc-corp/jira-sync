@@ -31,6 +31,10 @@ inputs:
     description: 'PR HTML URL (for pull_request event)'
     required: false
     default: ''
+  issue-type:
+    description: 'Jira Issue Type (e.g., Task, Story, Bug)'
+    required: false
+    default: 'Task'
 
 outputs:
   jira-key:
@@ -48,3 +52,4 @@ runs:
     ISSUE_URL: ${{ inputs.issue-url }}
     PR_BRANCH: ${{ inputs.pr-branch }}
     PR_URL: ${{ inputs.pr-url }}
+    ISSUE_TYPE: ${{ inputs.issue-type }}

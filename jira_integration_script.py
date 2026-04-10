@@ -363,44 +363,57 @@ def retry_api_call(func, max_retries=3, backoff_factor=2):
             time.sleep(wait_time)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Jira Sync GitHub Action")
-    parser.add_argument("--event-name", required=True, help="GitHub event name")
-    parser.add_argument("--jira-url", required=True, help="Jira base URL")
+    parser = argparse.ArgumentParser(description="Jira Integration Script for GitHub-to-Jira sync")
+    parser.add_argument("--event-name", required=True, help="GitHub event name (issues or pull_request)")
+    parser.add_argument("--jira-url", required=True, help="Jira instance URL")
     parser.add_argument("--jira-token", required=True, help="Jira API token")
     parser.add_argument("--project-key", required=True, help="Jira project key")
     parser.add_argument("--issue-title", default="", help="GitHub issue title")
     parser.add_argument("--issue-url", default="", help="GitHub issue URL")
-    parser.add_argument("--pr-branch", default="", help="Pull request branch name")
-    parser.add_argument("--pr-url", default="", help="Pull request URL")
+    parser.add_argument("--pr-branch", default="", help="PR branch name")
+    parser.add_argument("--pr-url", default="", help="PR URL")
+    parser.add_argument("--issue-type", default="Task", help="Jira issue type (default: Task)")
+    
     args = parser.parse_args()
 
-    # Apply CLI-provided values to module-level config
+    # Apply CLI configuration so helper functions use the requested Jira target.
+    # These assignments update the module-level globals used by REST API helpers.
     JIRA_URL = args.jira_url
     JIRA_TOKEN = args.jira_token
+    PROJECT_KEY = args.project_key
 
-    event = args.event_name
-    project = args.project_key
-    result = None
+    if args.event_name == "issues":
+        if not args.issue_title or not args.issue_url:
+            print("Error: --issue-title and --issue-url are required for issues events.", file=sys.stderr)
+            sys.exit(1)
 
-    if event == "issues":
-        summary = args.issue_title or "GitHub Issue"
-        description = (
-            f"Synced from GitHub issue: {args.issue_url}"
-            if args.issue_url
-            else "Synced from GitHub issue."
+        result = retry_api_call(
+            lambda: create_jira_issue(
+                args.project_key,
+                args.issue_title,
+                f"GitHub issue: {args.issue_url}",
+                issue_type=args.issue_type
+            )
         )
-        result = create_jira_issue(project, summary, description)
-    elif event == "pull_request":
-        summary = f"PR: {args.pr_branch}" if args.pr_branch else "GitHub Pull Request"
-        description = (
-            f"Synced from GitHub pull request: {args.pr_url}"
-            if args.pr_url
-            else "Synced from GitHub pull request."
+    elif args.event_name == "pull_request":
+        if not args.pr_branch or not args.pr_url:
+            print("Error: --pr-branch and --pr-url are required for pull_request events.", file=sys.stderr)
+            sys.exit(1)
+
+        result = retry_api_call(
+            lambda: create_jira_issue(
+                args.project_key,
+                f"PR: {args.pr_branch}",
+                f"GitHub pull request: {args.pr_url}",
+                issue_type=args.issue_type
+            )
         )
-        result = create_jira_issue(project, summary, description)
     else:
-        print(f"Unsupported event type: {event!r}. No Jira action taken.")
+        print(f"Error: Unsupported event '{args.event_name}'. Expected 'issues' or 'pull_request'.", file=sys.stderr)
         sys.exit(1)
 
     if result is None:
+        print("Error: Jira sync failed.", file=sys.stderr)
         sys.exit(1)
+
+    print("Jira sync completed successfully.")
