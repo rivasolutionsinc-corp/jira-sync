@@ -382,9 +382,42 @@ if __name__ == "__main__":
     parser.add_argument("--issue-type", default="Task", help="Jira issue type (default: Task)")
     
     args = parser.parse_args()
-    
-    # TODO: Implement event routing logic here
-    # For now, this is a placeholder for the main execution logic
-    print(f"Event: {args.event_name}")
-    print(f"Project: {args.project_key}")
-    print(f"Issue Type: {args.issue_type}")
+
+    # Apply CLI configuration so helper functions use the requested Jira target.
+    JIRA_URL = args.jira_url
+    JIRA_TOKEN = args.jira_token
+    globals()["PROJECT_KEY"] = args.project_key
+
+    if args.event_name == "issues":
+        if not args.issue_title or not args.issue_url:
+            print("Error: --issue-title and --issue-url are required for issues events.", file=sys.stderr)
+            sys.exit(1)
+
+        result = retry_api_call(
+            lambda: create_jira_issue(
+                args.issue_title,
+                f"GitHub issue: {args.issue_url}",
+                issue_type=args.issue_type
+            )
+        )
+    elif args.event_name == "pull_request":
+        if not args.pr_branch or not args.pr_url:
+            print("Error: --pr-branch and --pr-url are required for pull_request events.", file=sys.stderr)
+            sys.exit(1)
+
+        result = retry_api_call(
+            lambda: create_jira_issue(
+                f"PR: {args.pr_branch}",
+                f"GitHub pull request: {args.pr_url}",
+                issue_type=args.issue_type
+            )
+        )
+    else:
+        print(f"Error: Unsupported event '{args.event_name}'. Expected 'issues' or 'pull_request'.", file=sys.stderr)
+        sys.exit(1)
+
+    if result is None:
+        print("Error: Jira sync failed.", file=sys.stderr)
+        sys.exit(1)
+
+    print("Jira sync completed successfully.")
