@@ -98,6 +98,7 @@ jobs:
           transition-tag: 'In Development'
           deployment-stage: 'development'
           deployment-branch: 'develop'
+          issue-type: 'Task'
 
       - name: Handle stage branch push (In QA)
         if: github.ref_name == 'stage'
@@ -113,6 +114,7 @@ jobs:
           transition-tag: 'In QA'
           deployment-stage: 'staging'
           deployment-branch: 'stage'
+          issue-type: 'Task'
 
       - name: Handle main branch push (Deployed)
         if: github.ref_name == 'main'
@@ -128,6 +130,7 @@ jobs:
           transition-tag: 'Deployed'
           deployment-stage: 'production'
           deployment-branch: 'main'
+          issue-type: 'Task'
 
   # Handle feature branch pushes with Jira keys
   handle-feature-branch-push:
@@ -191,3 +194,4 @@ jobs:
           transition-tag: 'Deployed'
           deployment-stage: 'production'
           deployment-tag: ${{ github.event.ref }}
+          issue-type: 'Task'

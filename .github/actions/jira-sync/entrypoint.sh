@@ -12,19 +12,50 @@ ISSUE_URL="${7:-}"
 PR_BRANCH="${8:-}"
 PR_URL="${9:-}"
 ISSUE_TYPE="${10:-Task}"
+PR_ACTION="${11:-}"
+PR_MERGED="${12:-}"
+TRANSITION_OPENED="${13:-}"
+TRANSITION_MERGED="${14:-}"
+LINK_TITLE="${15:-}"
+PUSH_BRANCH="${16:-}"
+TARGET_BRANCH="${17:-}"
+TRANSITION_TAG="${18:-}"
+DEPLOYMENT_STAGE="${19:-}"
+DEPLOYMENT_BRANCH="${20:-}"
+TAG_NAME="${21:-}"
+TAG_REF="${22:-}"
+DEPLOYMENT_TAG="${23:-}"
 
 echo "::group::Jira Sync Action"
 echo "Event:   $EVENT_NAME"
 echo "Project: $PROJECT_KEY"
 echo "::endgroup::"
 
-python /action/jira_integration_script.py \
-   --event-name    "$EVENT_NAME" \
-   --jira-url      "$JIRA_URL" \
-   --jira-token    "$JIRA_PERSONAL_TOKEN" \
-   --project-key   "$PROJECT_KEY" \
-   --issue-title   "$ISSUE_TITLE" \
-   --issue-url     "$ISSUE_URL" \
-   --pr-branch     "$PR_BRANCH" \
-   --pr-url        "$PR_URL" \
-   --issue-type    "$ISSUE_TYPE"
+# Build command with optional arguments
+CMD="python /action/jira_integration_script.py"
+CMD="$CMD --event-name '$EVENT_NAME'"
+CMD="$CMD --jira-url '$JIRA_URL'"
+CMD="$CMD --jira-token '$JIRA_PERSONAL_TOKEN'"
+CMD="$CMD --project-key '$PROJECT_KEY'"
+
+# Add optional arguments only if they have values
+[ -n "$ISSUE_TITLE" ] && CMD="$CMD --issue-title '$ISSUE_TITLE'"
+[ -n "$ISSUE_URL" ] && CMD="$CMD --issue-url '$ISSUE_URL'"
+[ -n "$PR_BRANCH" ] && CMD="$CMD --pr-branch '$PR_BRANCH'"
+[ -n "$PR_URL" ] && CMD="$CMD --pr-url '$PR_URL'"
+[ -n "$ISSUE_TYPE" ] && CMD="$CMD --issue-type '$ISSUE_TYPE'"
+[ -n "$PR_ACTION" ] && CMD="$CMD --pr-action '$PR_ACTION'"
+[ "$PR_MERGED" = "true" ] && CMD="$CMD --pr-merged"
+[ -n "$TRANSITION_OPENED" ] && CMD="$CMD --transition-opened '$TRANSITION_OPENED'"
+[ -n "$TRANSITION_MERGED" ] && CMD="$CMD --transition-merged '$TRANSITION_MERGED'"
+[ -n "$LINK_TITLE" ] && CMD="$CMD --link-title '$LINK_TITLE'"
+[ -n "$PUSH_BRANCH" ] && CMD="$CMD --push-branch '$PUSH_BRANCH'"
+[ -n "$TARGET_BRANCH" ] && CMD="$CMD --target-branch '$TARGET_BRANCH'"
+[ -n "$TRANSITION_TAG" ] && CMD="$CMD --transition-tag '$TRANSITION_TAG'"
+[ -n "$DEPLOYMENT_STAGE" ] && CMD="$CMD --deployment-stage '$DEPLOYMENT_STAGE'"
+[ -n "$DEPLOYMENT_BRANCH" ] && CMD="$CMD --deployment-branch '$DEPLOYMENT_BRANCH'"
+[ -n "$TAG_NAME" ] && CMD="$CMD --tag-name '$TAG_NAME'"
+[ -n "$TAG_REF" ] && CMD="$CMD --tag-ref '$TAG_REF'"
+[ -n "$DEPLOYMENT_TAG" ] && CMD="$CMD --deployment-tag '$DEPLOYMENT_TAG'"
+
+eval "$CMD"
