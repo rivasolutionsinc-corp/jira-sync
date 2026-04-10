@@ -93,11 +93,8 @@ jobs:
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
           project-key: ${{ env.PROJECT_KEY }}
           event-name: 'push'
-          push-branch: ${{ github.ref_name }}
-          target-branch: 'develop'
-          transition-tag: 'In Development'
-          deployment-stage: 'development'
-          deployment-branch: 'develop'
+          pr-branch: ${{ github.ref_name }}
+          issue-type: 'Task'
 
       - name: Handle stage branch push (In QA)
         if: github.ref_name == 'stage'
@@ -108,11 +105,8 @@ jobs:
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
           project-key: ${{ env.PROJECT_KEY }}
           event-name: 'push'
-          push-branch: ${{ github.ref_name }}
-          target-branch: 'stage'
-          transition-tag: 'In QA'
-          deployment-stage: 'staging'
-          deployment-branch: 'stage'
+          pr-branch: ${{ github.ref_name }}
+          issue-type: 'Task'
 
       - name: Handle main branch push (Deployed)
         if: github.ref_name == 'main'
@@ -123,11 +117,8 @@ jobs:
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
           project-key: ${{ env.PROJECT_KEY }}
           event-name: 'push'
-          push-branch: ${{ github.ref_name }}
-          target-branch: 'main'
-          transition-tag: 'Deployed'
-          deployment-stage: 'production'
-          deployment-branch: 'main'
+          pr-branch: ${{ github.ref_name }}
+          issue-type: 'Task'
 
   # Handle feature branch pushes with Jira keys
   handle-feature-branch-push:
@@ -186,8 +177,4 @@ jobs:
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
           project-key: ${{ env.PROJECT_KEY }}
           event-name: 'create'
-          tag-name: ${{ github.event.ref }}
-          tag-ref: ${{ github.event.master_branch }}
-          transition-tag: 'Deployed'
-          deployment-stage: 'production'
-          deployment-tag: ${{ github.event.ref }}
+          issue-type: 'Task'
