@@ -44,6 +44,26 @@ inputs:
     description: 'Jira Issue Type (e.g., Task, Story, Bug)'
     required: false
     default: 'Task'
+  pr-action:
+    description: 'PR action type (opened, synchronize, closed)'
+    required: false
+    default: ''
+  pr-merged:
+    description: 'Flag indicating if PR is merged'
+    required: false
+    default: 'false'
+  transition-opened:
+    description: 'Jira transition to apply when PR is opened'
+    required: false
+    default: ''
+  transition-merged:
+    description: 'Jira transition to apply when PR is merged'
+    required: false
+    default: ''
+  link-title:
+    description: 'Custom title for GitHub PR link'
+    required: false
+    default: 'GitHub PR'
 
 outputs:
   jira-key:
@@ -64,3 +84,8 @@ runs:
     - ${{ inputs.pr-branch }}
     - ${{ inputs.pr-url }}
     - ${{ inputs.issue-type }}
+    - ${{ inputs.pr-action }}
+    - ${{ inputs.pr-merged }}
+    - ${{ inputs.transition-opened }}
+    - ${{ inputs.transition-merged }}
+    - ${{ inputs.link-title }}
