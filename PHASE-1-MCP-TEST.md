@@ -7,3 +7,7 @@ Testing the MCP Native Action implementation with JSON-RPC payload construction.
 - Action: Composite action with jq JSON-RPC payload
 - Expected: Jira issue created via MCP server
 
+# MCP Lifecycle Wrapper Test
+
+Testing the MCP lifecycle wrapper with proper JSON-RPC handshake.
+
