@@ -31,6 +31,11 @@ jobs:
           issue-url: 'https://github.com/${{ github.repository }}/issues/1'
           pr-branch: 'feature/CLOUD-1929-docker-container-action'
           pr-url: 'https://github.com/${{ github.repository }}/pull/1'
+          pr-action: 'opened'
+          pr-merged: 'false'
+          transition-opened: 'In Progress'
+          transition-merged: 'Done'
+          link-title: 'GitHub PR'
 
       - name: Log Action Output
         run: |
