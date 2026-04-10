@@ -1,9 +1,7 @@
-name: 'Jira Sync (MCP Native)'
+name: 'Jira Sync'
 description: >
-  Sync GitHub Issues and PRs to a self-hosted Jira Data Center instance via
-  the Atlassian MCP image using native JSON-RPC communication with proper
-  lifecycle management. Authenticates using a Jira Data Center Personal
-  Access Token (PAT) together with a Jira login username.
+  Sync GitHub Issues and PRs to a self-hosted Jira Data Center instance
+  using a custom Docker container with REST API integration.
 author: 'AHRQ DevOps'
 
 inputs:
@@ -53,20 +51,16 @@ outputs:
     value: ${{ steps.jira-sync.outputs.jira-key }}
 
 runs:
-  using: 'composite'
-  steps:
-    - name: Jira Sync via MCP (Lifecycle Wrapper)
-      id: jira-sync
-      shell: bash
-      run: |
-        python3 ${{ github.action_path }}/mcp_lifecycle_client.py \
-          --jira-url "${{ inputs.jira-url }}" \
-          --jira-username "${{ inputs.jira-username }}" \
-          --jira-personal-token "${{ inputs.jira-personal-token }}" \
-          --project-key "${{ inputs.project-key }}" \
-          --event-name "${{ inputs.event-name }}" \
-          --issue-title "${{ inputs.issue-title }}" \
-          --issue-url "${{ inputs.issue-url }}" \
-          --pr-branch "${{ inputs.pr-branch }}" \
-          --pr-url "${{ inputs.pr-url }}" \
-          --issue-type "${{ inputs.issue-type }}"
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.jira-url }}
+    - ${{ inputs.jira-username }}
+    - ${{ inputs.jira-personal-token }}
+    - ${{ inputs.project-key }}
+    - ${{ inputs.event-name }}
+    - ${{ inputs.issue-title }}
+    - ${{ inputs.issue-url }}
+    - ${{ inputs.pr-branch }}
+    - ${{ inputs.pr-url }}
+    - ${{ inputs.issue-type }}
