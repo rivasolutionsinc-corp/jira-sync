@@ -685,16 +685,17 @@ def route_event(event_name: str, args) -> Any:
     """Routes GitHub events to appropriate Jira actions based on configuration.
     
     Supports configurable event routing with transition names and branch matching.
+    Handles deployment lifecycle events: issues, pull_request, push, and create (tags).
     
     Args:
-        event_name (str): GitHub event type (issues, pull_request, push)
+        event_name (str): GitHub event type (issues, pull_request, push, create)
         args: Parsed command-line arguments
     
     Returns:
         Any: Result of the routed action
     """
-    log_action(f"Routing event", level="DEBUG", event_name=event_name, 
-              target_branch=args.target_branch)
+    log_action(f"Routing event", level="DEBUG", event_name=event_name,
+              target_branch=args.target_branch, deployment_stage=getattr(args, 'deployment_stage', None))
     
     if event_name == "issues":
         return handle_issues_event(args)
@@ -702,9 +703,11 @@ def route_event(event_name: str, args) -> Any:
         return handle_pull_request_event(args)
     elif event_name == "push":
         return handle_push_event(args)
+    elif event_name == "create":
+        return handle_tag_event(args)
     else:
         log_action(f"Unsupported event type", level="ERROR", event_name=event_name)
-        print(f"Error: Unsupported event '{event_name}'. Expected 'issues', 'pull_request', or 'push'.", file=sys.stderr)
+        print(f"Error: Unsupported event '{event_name}'. Expected 'issues', 'pull_request', 'push', or 'create'.", file=sys.stderr)
         return None
 
 
@@ -819,9 +822,15 @@ def handle_pull_request_event(args) -> bool:
 
 
 def handle_push_event(args) -> bool:
-    """Handles GitHub push event.
+    """Handles GitHub push event for deployment branches.
+    
+    Maps branch pushes to Jira state transitions:
+    - develop → In Development
+    - stage → In QA
+    - main → Deployed
     
     Supports tagging issues when commits are pushed to specific branches.
+    Adds deployment metadata to Jira comments.
     
     Args:
         args: Parsed command-line arguments
@@ -834,7 +843,8 @@ def handle_push_event(args) -> bool:
         return False
     
     log_action(f"Handling push event", level="DEBUG",
-              branch=args.push_branch, target_branch=args.target_branch)
+              branch=args.push_branch, target_branch=args.target_branch,
+              deployment_stage=getattr(args, 'deployment_stage', None))
     
     # Check if push branch matches target branch
     if args.target_branch and args.push_branch != args.target_branch:
@@ -855,6 +865,24 @@ def handle_push_event(args) -> bool:
     log_action(f"Found Jira key in branch", level="DEBUG",
               jira_key=jira_key, branch=args.push_branch)
     
+    success = True
+    
+    # Add deployment metadata comment
+    deployment_stage = getattr(args, 'deployment_stage', 'unknown')
+    deployment_branch = getattr(args, 'deployment_branch', args.push_branch)
+    commit_sha = os.getenv('GITHUB_SHA', 'unknown')[:7]
+    
+    deployment_comment = (
+        f"🚀 Deployment Event: {deployment_stage.upper()}\n"
+        f"Branch: {deployment_branch}\n"
+        f"Commit: {commit_sha}\n"
+        f"Timestamp: {datetime.now().isoformat()}"
+    )
+    
+    if not retry_api_call(lambda: add_comment(jira_key, deployment_comment)):
+        log_action(f"Failed to add deployment comment", level="WARNING", issue_key=jira_key)
+        success = False
+    
     # Transition issue if configured
     if args.transition_tag:
         if not change_issue_status(jira_key, args.transition_tag):
@@ -862,12 +890,87 @@ def handle_push_event(args) -> bool:
                       issue_key=jira_key, transition=args.transition_tag)
             return False
     
-    return True
+    return success
+
+
+def handle_tag_event(args) -> bool:
+    """Handles GitHub tag creation event (create event with ref_type=tag).
+    
+    Maps tag creation to production deployment:
+    - Tag pattern: v*.*.* → Deployed
+    
+    Extracts Jira key from commit message or branch and transitions to Deployed state.
+    Adds deployment metadata including tag name and commit information.
+    
+    Args:
+        args: Parsed command-line arguments
+    
+    Returns:
+        bool: True on success, False on failure
+    """
+    tag_name = getattr(args, 'tag_name', None)
+    
+    if not tag_name:
+        log_action(f"No tag name provided for create event", level="INFO")
+        print("No tag name provided. Skipping tag sync.")
+        return True  # Not an error, just skip
+    
+    log_action(f"Handling tag creation event", level="DEBUG",
+              tag_name=tag_name, deployment_stage='production')
+    
+    # Validate tag pattern (v*.*.*)
+    if not re.match(r'^v\d+\.\d+\.\d+', tag_name):
+        log_action(f"Tag does not match production release pattern", level="INFO",
+                  tag_name=tag_name, pattern='v*.*.*')
+        print(f"Tag '{tag_name}' does not match production release pattern (v*.*.*). Skipping.")
+        return True  # Not an error, just skip
+    
+    log_action(f"Tag matches production release pattern", level="DEBUG",
+              tag_name=tag_name)
+    
+    # Try to extract Jira key from tag name (e.g., v1.2.3-CLOUD-1234)
+    jira_key = extract_jira_key_from_branch(tag_name)
+    
+    if not jira_key:
+        log_action(f"No Jira key found in tag name", level="INFO",
+                  tag_name=tag_name)
+        print("No Jira key found in tag name. Skipping tag sync.")
+        return True  # Not an error, just skip
+    
+    log_action(f"Found Jira key in tag", level="DEBUG",
+              jira_key=jira_key, tag_name=tag_name)
+    
+    success = True
+    
+    # Add deployment metadata comment
+    deployment_tag = getattr(args, 'deployment_tag', tag_name)
+    tag_ref = getattr(args, 'tag_ref', 'main')
+    
+    deployment_comment = (
+        f"🚀 Production Release: {deployment_tag}\n"
+        f"Branch: {tag_ref}\n"
+        f"Timestamp: {datetime.now().isoformat()}\n"
+        f"Status: Deployed to Production"
+    )
+    
+    if not retry_api_call(lambda: add_comment(jira_key, deployment_comment)):
+        log_action(f"Failed to add production deployment comment", level="WARNING", issue_key=jira_key)
+        success = False
+    
+    # Transition issue to Deployed if configured
+    transition_tag = getattr(args, 'transition_tag', 'Deployed')
+    if transition_tag:
+        if not change_issue_status(jira_key, transition_tag):
+            log_action(f"Failed to transition issue on tag creation", level="ERROR",
+                      issue_key=jira_key, transition=transition_tag)
+            return False
+    
+    return success
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Jira Integration Script for GitHub-to-Jira sync (Phase 2: Production-Ready REST API)",
+        description="Jira Integration Script for GitHub-to-Jira sync (Phase 3: Deployment Orchestration)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -893,21 +996,47 @@ Examples:
     --transition-opened "In Progress" \\
     --transition-merged "Done"
 
-  # Handle push event with target branch matching
+  # Handle push event to develop branch (In Development)
   python jira_integration_script.py \\
     --event-name push \\
     --jira-url https://jira.example.com \\
     --jira-token YOUR_TOKEN \\
     --project-key CLOUD \\
-    --push-branch main \\
-    --target-branch main \\
-    --transition-tag "Released"
+    --push-branch develop \\
+    --target-branch develop \\
+    --transition-tag "In Development" \\
+    --deployment-stage development \\
+    --deployment-branch develop
+
+  # Handle push event to stage branch (In QA)
+  python jira_integration_script.py \\
+    --event-name push \\
+    --jira-url https://jira.example.com \\
+    --jira-token YOUR_TOKEN \\
+    --project-key CLOUD \\
+    --push-branch stage \\
+    --target-branch stage \\
+    --transition-tag "In QA" \\
+    --deployment-stage staging \\
+    --deployment-branch stage
+
+  # Handle tag creation event (Deployed)
+  python jira_integration_script.py \\
+    --event-name create \\
+    --jira-url https://jira.example.com \\
+    --jira-token YOUR_TOKEN \\
+    --project-key CLOUD \\
+    --tag-name v1.2.3-CLOUD-1234 \\
+    --tag-ref main \\
+    --transition-tag "Deployed" \\
+    --deployment-stage production \\
+    --deployment-tag v1.2.3-CLOUD-1234
         """
     )
     
     # Core arguments
-    parser.add_argument("--event-name", required=True, 
-                       choices=["issues", "pull_request", "push"],
+    parser.add_argument("--event-name", required=True,
+                       choices=["issues", "pull_request", "push", "create"],
                        help="GitHub event name")
     parser.add_argument("--jira-url", required=True, help="Jira instance URL")
     parser.add_argument("--jira-token", required=True, help="Jira API token")
@@ -922,26 +1051,38 @@ Examples:
     parser.add_argument("--pr-branch", default="", help="PR source branch name")
     parser.add_argument("--pr-url", default="", help="PR URL")
     parser.add_argument("--pr-title", default="", help="PR title for linking")
-    parser.add_argument("--pr-action", default="opened", 
+    parser.add_argument("--pr-action", default="opened",
                        choices=["opened", "synchronize", "closed"],
                        help="PR action (default: opened)")
-    parser.add_argument("--pr-merged", action="store_true", 
+    parser.add_argument("--pr-merged", action="store_true",
                        help="Flag indicating PR was merged (for closed action)")
     
     # Push event arguments
     parser.add_argument("--push-branch", default="", help="Branch name for push event")
     
+    # Tag/Create event arguments (Phase 3: Deployment Orchestration)
+    parser.add_argument("--tag-name", default="", help="Tag name for create event (e.g., v1.2.3-CLOUD-1234)")
+    parser.add_argument("--tag-ref", default="main", help="Reference branch for tag (default: main)")
+    
     # Transition arguments (Phase 1 generalization)
-    parser.add_argument("--transition-opened", default="", 
+    parser.add_argument("--transition-opened", default="",
                        help="Jira transition name when PR is opened (e.g., 'In Progress')")
-    parser.add_argument("--transition-merged", default="", 
+    parser.add_argument("--transition-merged", default="",
                        help="Jira transition name when PR is merged (e.g., 'Done')")
-    parser.add_argument("--transition-tag", default="", 
-                       help="Jira transition name when pushed to target branch (e.g., 'Released')")
+    parser.add_argument("--transition-tag", default="",
+                       help="Jira transition name when pushed to target branch or tag created (e.g., 'Deployed')")
     
     # Event routing arguments (Phase 1 generalization)
-    parser.add_argument("--target-branch", default="", 
-                       help="Target branch for push event matching (e.g., 'main', 'develop')")
+    parser.add_argument("--target-branch", default="",
+                       help="Target branch for push event matching (e.g., 'main', 'develop', 'stage')")
+    
+    # Deployment metadata arguments (Phase 3: Deployment Orchestration)
+    parser.add_argument("--deployment-stage", default="",
+                       help="Deployment stage (development, staging, production)")
+    parser.add_argument("--deployment-branch", default="",
+                       help="Deployment branch name for metadata")
+    parser.add_argument("--deployment-tag", default="",
+                       help="Deployment tag for metadata")
     
     # Link arguments (Phase 1 generalization)
     parser.add_argument("--link-title", default="GitHub PR",

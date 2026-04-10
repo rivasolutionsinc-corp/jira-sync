@@ -1,21 +1,45 @@
-name: Jira Sync
+name: Jira Sync - Deployment Orchestration
 
 on:
   issues:
     types: [opened]
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, closed]
+  push:
+    branches:
+      - develop
+      - stage
+      - main
+    tags:
+      - 'v*.*.*'
+  create:
+    # Triggered when a tag is created
+    tags:
+      - 'v*.*.*'
+
+env:
+  JIRA_URL: 'https://cmext.ahrq.gov/jira'
+  PROJECT_KEY: 'CLOUD'
 
 jobs:
+  # Handle GitHub issues and PR events
   sync-to-jira:
     runs-on: ubuntu-latest
+    if: github.event_name != 'push' && github.event_name != 'create'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           clean: true
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.head_ref || github.ref }}
+
+      - name: Log event details
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Action: ${{ github.event.action }}"
+          echo "Branch: ${{ github.head_ref || github.ref_name }}"
+          echo "PR Merged: ${{ github.event.pull_request.merged }}"
 
       - name: Prepare action directory
         run: cp jira_integration_script.py .github/actions/jira-sync/
@@ -23,10 +47,10 @@ jobs:
       - name: Run Jira Sync Action
         uses: ./.github/actions/jira-sync
         with:
-          jira-url: 'https://cmext.ahrq.gov/jira'
+          jira-url: ${{ env.JIRA_URL }}
           jira-username: ${{ secrets.JIRA_USERNAME }}
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
-          project-key: 'CLOUD'
+          project-key: ${{ env.PROJECT_KEY }}
           event-name: ${{ github.event_name }}
           issue-title: ${{ github.event.issue.title }}
           issue-url: ${{ github.event.issue.html_url }}
@@ -38,3 +62,101 @@ jobs:
           transition-opened: 'In Progress'
           transition-merged: 'Done'
           link-title: 'GitHub PR'
+
+  # Handle push events to deployment branches
+  handle-deployment-push:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log push event
+        run: |
+          echo "Push Event Detected"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Ref: ${{ github.ref }}"
+
+      - name: Prepare action directory
+        run: cp jira_integration_script.py .github/actions/jira-sync/
+
+      - name: Handle develop branch push (In Development)
+        if: github.ref_name == 'develop'
+        uses: ./.github/actions/jira-sync
+        with:
+          jira-url: ${{ env.JIRA_URL }}
+          jira-username: ${{ secrets.JIRA_USERNAME }}
+          jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
+          project-key: ${{ env.PROJECT_KEY }}
+          event-name: 'push'
+          push-branch: ${{ github.ref_name }}
+          target-branch: 'develop'
+          transition-tag: 'In Development'
+          deployment-stage: 'development'
+          deployment-branch: 'develop'
+
+      - name: Handle stage branch push (In QA)
+        if: github.ref_name == 'stage'
+        uses: ./.github/actions/jira-sync
+        with:
+          jira-url: ${{ env.JIRA_URL }}
+          jira-username: ${{ secrets.JIRA_USERNAME }}
+          jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
+          project-key: ${{ env.PROJECT_KEY }}
+          event-name: 'push'
+          push-branch: ${{ github.ref_name }}
+          target-branch: 'stage'
+          transition-tag: 'In QA'
+          deployment-stage: 'staging'
+          deployment-branch: 'stage'
+
+      - name: Handle main branch push (Deployed)
+        if: github.ref_name == 'main'
+        uses: ./.github/actions/jira-sync
+        with:
+          jira-url: ${{ env.JIRA_URL }}
+          jira-username: ${{ secrets.JIRA_USERNAME }}
+          jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
+          project-key: ${{ env.PROJECT_KEY }}
+          event-name: 'push'
+          push-branch: ${{ github.ref_name }}
+          target-branch: 'main'
+          transition-tag: 'Deployed'
+          deployment-stage: 'production'
+          deployment-branch: 'main'
+
+  # Handle tag creation events (production releases)
+  handle-tag-creation:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'create' && github.event.ref_type == 'tag'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log tag creation event
+        run: |
+          echo "Tag Creation Event Detected"
+          echo "Tag: ${{ github.event.ref }}"
+          echo "Commit: ${{ github.event.master_branch }}"
+
+      - name: Prepare action directory
+        run: cp jira_integration_script.py .github/actions/jira-sync/
+
+      - name: Handle production tag (Deployed)
+        uses: ./.github/actions/jira-sync
+        with:
+          jira-url: ${{ env.JIRA_URL }}
+          jira-username: ${{ secrets.JIRA_USERNAME }}
+          jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
+          project-key: ${{ env.PROJECT_KEY }}
+          event-name: 'create'
+          tag-name: ${{ github.event.ref }}
+          tag-ref: ${{ github.event.master_branch }}
+          transition-tag: 'Deployed'
+          deployment-stage: 'production'
+          deployment-tag: ${{ github.event.ref }}
