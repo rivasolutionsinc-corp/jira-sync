@@ -1,35 +1,116 @@
-name: Jira Sync
+name: 'Jira Sync'
+description: >
+  Sync GitHub Issues and PRs to a self-hosted Jira Data Center instance natively
+  using the Atlassian MCP server via JSON-RPC.
+author: 'AHRQ DevOps'
 
-on:
-  issues:
-    types: [opened]
-  pull_request:
-    types: [opened, synchronize]
+inputs:
+  jira-url:
+    description: 'Base URL of the self-hosted Jira Data Center instance (e.g. https://cmext.ahrq.gov/jira)'
+    required: true
+  jira-username:
+    description: 'Jira Data Center login username'
+    required: true
+  jira-personal-token:
+    description: 'Personal Access Token (PAT) generated in Jira Data Center'
+    required: true
+  project-key:
+    description: 'Jira project key (e.g. CLOUD)'
+    required: true
+  event-name:
+    description: 'GitHub event name: issues or pull_request'
+    required: true
+  issue-title:
+    description: 'GitHub Issue title (for issues event)'
+    required: false
+    default: ''
+  issue-url:
+    description: 'GitHub Issue HTML URL (for issues event)'
+    required: false
+    default: ''
+  pr-branch:
+    description: 'PR head branch name (for pull_request event)'
+    required: false
+    default: ''
+  pr-url:
+    description: 'PR HTML URL (for pull_request event)'
+    required: false
+    default: ''
+  issue-type:
+    description: 'Jira Issue Type (e.g., Task, Story, Bug)'
+    required: false
+    default: 'Task'
 
-jobs:
-  sync-to-jira:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          clean: true
-          ref: ${{ github.head_ref }}
+outputs:
+  jira-response:
+    description: 'The raw JSON-RPC response from the MCP server'
+    value: ${{ steps.mcp-call.outputs.response }}
 
-      - name: Prepare action directory
-        run: cp jira_integration_script.py .github/actions/jira-sync/
+runs:
+  using: 'composite'
+  steps:
+    - name: Execute MCP Tool Call via JSON-RPC
+      id: mcp-call
+      shell: bash
+      run: |
+        echo "::group::Prepare MCP Payload"
+        
+        # Route the event to determine the summary and description
+        if [ "${{ inputs.event-name }}" = "issues" ]; then
+          SUMMARY="GH Issue: ${{ inputs.issue-title }}"
+          DESCRIPTION="Source URL: ${{ inputs.issue-url }}"
+        elif [ "${{ inputs.event-name }}" = "pull_request" ]; then
+          SUMMARY="PR: ${{ inputs.pr-branch }}"
+          DESCRIPTION="GitHub pull request: ${{ inputs.pr-url }}"
+        else
+          echo "Error: Unsupported event '${{ inputs.event-name }}'"
+          exit 1
+        fi
 
-      - name: Run Jira Sync Action
-        uses: ./.github/actions/jira-sync
-        with:
-          jira-url: 'https://cmext.ahrq.gov/jira'
-          jira-username: ${{ secrets.JIRA_USERNAME }}
-          jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
-          project-key: 'CLOUD'
-          event-name: ${{ github.event_name }}
-          issue-title: ${{ github.event.issue.title }}
-          issue-url: ${{ github.event.issue.html_url }}
-          pr-branch: ${{ github.head_ref }}
-          pr-url: ${{ github.event.pull_request.html_url }}
-          issue-type: 'Task'
+        # Construct the exact JSON-RPC payload the MCP server expects
+        PAYLOAD=$(jq -n \
+          --arg name "jira_create_issue" \
+          --arg projectKey "${{ inputs.project-key }}" \
+          --arg summary "$SUMMARY" \
+          --arg description "$DESCRIPTION" \
+          --arg issueType "${{ inputs.issue-type }}" \
+          '{
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: {
+              name: $name,
+              arguments: {
+                projectKey: $projectKey,
+                summary: $summary,
+                description: $description,
+                issueType: $issueType
+              }
+            }
+          }')
+        
+        echo "Constructed Payload:"
+        echo "$PAYLOAD" | jq .
+        echo "::endgroup::"
+
+        echo "::group::Execute MCP Container"
+        
+        # Pipe the payload directly into the standard input (-i) of the MCP container
+        RESPONSE=$(echo "$PAYLOAD" | docker run -i --rm \
+          -e JIRA_URL="${{ inputs.jira-url }}" \
+          -e JIRA_USERNAME="${{ inputs.jira-username }}" \
+          -e JIRA_API_TOKEN="${{ inputs.jira-personal-token }}" \
+          ghcr.io/sooperset/mcp-atlassian:latest)
+        
+        echo "MCP Server Response:"
+        echo "$RESPONSE" | jq .
+        
+        # Basic error checking on the JSON-RPC response
+        if echo "$RESPONSE" | grep -q '"isError":true'; then
+          echo "Error: MCP Tool execution failed."
+          exit 1
+        fi
+        
+        # Save output for subsequent steps
+        echo "response=$RESPONSE" >> $GITHUB_OUTPUT
+        echo "::endgroup::"

@@ -1,9 +1,10 @@
-name: 'Jira Sync'
+name: 'Jira Sync (MCP Native)'
 description: >
   Sync GitHub Issues and PRs to a self-hosted Jira Data Center instance via
-  the Atlassian MCP image. Authenticates using a Jira Data Center Personal
-  Access Token (PAT) together with a Jira login username. This action does NOT
-  support Jira Cloud API tokens or email-based authentication.
+  the Atlassian MCP image using native JSON-RPC communication. Authenticates 
+  using a Jira Data Center Personal Access Token (PAT) together with a Jira 
+  login username. This action does NOT support Jira Cloud API tokens or 
+  email-based authentication.
 author: 'AHRQ DevOps'
 
 inputs:
@@ -50,18 +51,92 @@ inputs:
 outputs:
   jira-key:
     description: 'The Jira issue key that was created or updated'
+    value: ${{ steps.jira-sync.outputs.jira-key }}
 
 runs:
-  using: 'docker'
-  image: 'Dockerfile'
-  env:
-    JIRA_URL: ${{ inputs.jira-url }}
-    JIRA_USERNAME: ${{ inputs.jira-username }}
-    JIRA_PERSONAL_TOKEN: ${{ inputs.jira-personal-token }}
-    PROJECT_KEY: ${{ inputs.project-key }}
-    EVENT_NAME: ${{ inputs.event-name }}
-    ISSUE_TITLE: ${{ inputs.issue-title }}
-    ISSUE_URL: ${{ inputs.issue-url }}
-    PR_BRANCH: ${{ inputs.pr-branch }}
-    PR_URL: ${{ inputs.pr-url }}
-    ISSUE_TYPE: ${{ inputs.issue-type }}
+  using: 'composite'
+  steps:
+    - name: Jira Sync via MCP
+      id: jira-sync
+      shell: bash
+      env:
+        JIRA_URL: ${{ inputs.jira-url }}
+        JIRA_USERNAME: ${{ inputs.jira-username }}
+        JIRA_PERSONAL_TOKEN: ${{ inputs.jira-personal-token }}
+        PROJECT_KEY: ${{ inputs.project-key }}
+        EVENT_NAME: ${{ inputs.event-name }}
+        ISSUE_TITLE: ${{ inputs.issue-title }}
+        ISSUE_URL: ${{ inputs.issue-url }}
+        PR_BRANCH: ${{ inputs.pr-branch }}
+        PR_URL: ${{ inputs.pr-url }}
+        ISSUE_TYPE: ${{ inputs.issue-type }}
+      run: |
+        set -euo pipefail
+        
+        echo "::group::Jira Sync Action (MCP Native)"
+        echo "Event:   $EVENT_NAME"
+        echo "Project: $PROJECT_KEY"
+        echo "::endgroup::"
+        
+        # Determine payload based on event type
+        if [ "$EVENT_NAME" = "issues" ]; then
+          SUMMARY="$ISSUE_TITLE"
+          DESCRIPTION="GitHub issue: $ISSUE_URL"
+        elif [ "$EVENT_NAME" = "pull_request" ]; then
+          SUMMARY="PR: $PR_BRANCH"
+          DESCRIPTION="GitHub pull request: $PR_URL"
+        else
+          echo "::error::Unsupported event type: $EVENT_NAME"
+          exit 1
+        fi
+        
+        # Construct JSON-RPC payload for jira_create_issue
+        PAYLOAD=$(jq -n \
+          --arg method "jira_create_issue" \
+          --arg project_key "$PROJECT_KEY" \
+          --arg summary "$SUMMARY" \
+          --arg description "$DESCRIPTION" \
+          --arg issue_type "$ISSUE_TYPE" \
+          '{
+            jsonrpc: "2.0",
+            id: 1,
+            method: $method,
+            params: {
+              project_key: $project_key,
+              summary: $summary,
+              description: $description,
+              issue_type: $issue_type
+            }
+          }')
+        
+        echo "Sending JSON-RPC request to MCP server..."
+        
+        # Run MCP server and send JSON-RPC payload via stdin
+        RESPONSE=$(echo "$PAYLOAD" | docker run \
+          --rm \
+          -i \
+          -e "JIRA_URL=$JIRA_URL" \
+          -e "JIRA_USERNAME=$JIRA_USERNAME" \
+          -e "JIRA_PERSONAL_TOKEN=$JIRA_PERSONAL_TOKEN" \
+          ghcr.io/sooperset/mcp-atlassian:latest 2>&1 || true)
+        
+        echo "MCP Response:"
+        echo "$RESPONSE"
+        
+        # Check for errors in response
+        if echo "$RESPONSE" | grep -q '"isError":true'; then
+          echo "::error::Jira sync failed - MCP error detected"
+          exit 1
+        fi
+        
+        # Extract issue key from response
+        JIRA_KEY=$(echo "$RESPONSE" | grep -oP '(?<="key":")([A-Z]+-\d+)' | head -1 || true)
+        
+        if [ -z "$JIRA_KEY" ]; then
+          echo "::error::Failed to extract Jira issue key from response"
+          exit 1
+        fi
+        
+        echo "Successfully created issue: $JIRA_KEY"
+        echo "jira-key=$JIRA_KEY" >> "$GITHUB_OUTPUT"
+        echo "Jira sync completed successfully."
