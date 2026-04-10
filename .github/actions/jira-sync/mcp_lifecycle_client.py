@@ -232,8 +232,8 @@ class MCPLifecycleClient:
             
         print(f"✓ Comment added to {issue_key}")
         return True
-     
-     def terminate(self) -> bool:
+    
+    def terminate(self) -> bool:
         """Gracefully terminate the MCP server connection."""
         print("\n[4/4] Terminating MCP connection...")
         
