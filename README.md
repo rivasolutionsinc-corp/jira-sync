@@ -10,10 +10,13 @@ This project automates the lifecycle between GitHub and Jira, enabling seamless 
 
 ## Features
 
-### Current Implementation (Phase 1)
+### Current Implementation (Phase 1: Generalized Python Toolset)
 - **GitHub Issue Opened** → Automatically creates a Jira Task in CLOUD project
 - **GitHub PR Opened/Synchronized** → Automatically adds comments to linked Jira issue with PR details
+- **Configurable Transitions** → Transition issues on PR opened, merged, or push events
+- **Push Event Support** → Automatically transition issues when code is pushed to target branches
 - **Jira Key Extraction** → Automatically extracts Jira key from branch name (e.g., `feature/CLOUD-1927`)
+- **Customizable Link Titles** → Configure custom titles for GitHub PR links in Jira
 
 ### Docker Container Action (CLOUD-1929)
 - **Containerized Action** - Published to GHCR for cross-repository reusability
@@ -273,12 +276,66 @@ Comprehensive documentation is available in `.ai-memory/`:
 - **04-TROUBLESHOOTING-GUIDE.md** - Common issues and solutions
 - **05-FUTURE-ENHANCEMENTS.md** - Roadmap and planned features
 
+## Phase 1: Generalized Python Toolset (CLOUD-1959)
+
+### New CLI Arguments
+
+Phase 1 introduces configurable event routing and transitions via CLI arguments:
+
+#### Transition Arguments
+- `--transition-opened` - Jira transition when PR is opened (e.g., "In Progress")
+- `--transition-merged` - Jira transition when PR is merged (e.g., "Done")
+- `--transition-tag` - Jira transition when pushed to target branch (e.g., "Released")
+
+#### Event Routing Arguments
+- `--target-branch` - Target branch for push event matching (e.g., "main")
+- `--pr-action` - PR action type (opened, synchronize, closed)
+- `--pr-merged` - Flag indicating PR was merged
+
+#### Link Arguments
+- `--link-title` - Custom title for GitHub PR links (default: "GitHub PR")
+
+### Example Usage
+
+```bash
+# PR opened with transition
+python jira_integration_script.py \
+  --event-name pull_request \
+  --jira-url https://jira.example.com \
+  --jira-token YOUR_TOKEN \
+  --project-key CLOUD \
+  --pr-branch feature/CLOUD-1234-description \
+  --pr-url https://github.com/org/repo/pull/1 \
+  --pr-action opened \
+  --transition-opened "In Progress"
+
+# Push to main with release transition
+python jira_integration_script.py \
+  --event-name push \
+  --jira-url https://jira.example.com \
+  --jira-token YOUR_TOKEN \
+  --project-key CLOUD \
+  --push-branch main \
+  --target-branch main \
+  --transition-tag "Released"
+```
+
+### Backward Compatibility
+
+All Phase 0 workflows continue to work without modification. New arguments are optional.
+
+### Documentation
+
+- **Implementation Guide:** [`.ai-memory/PHASE_1_IMPLEMENTATION_GUIDE.md`](.ai-memory/PHASE_1_IMPLEMENTATION_GUIDE.md)
+- **Migration Guide:** [`.ai-memory/PHASE_0_TO_PHASE_1_MIGRATION_GUIDE.md`](.ai-memory/PHASE_0_TO_PHASE_1_MIGRATION_GUIDE.md)
+- **Test Suite:** `test_phase1_generalization.py` (34 tests, 100% pass rate)
+
 ## Future Enhancements
 
 ### Phase 2: Enhanced Automation
-- Automatic issue transitions (In Progress, Done)
 - Custom field updates
 - Subtask creation for PRs
+- Advanced workflow automation
 
 ### Phase 3: Bidirectional Sync
 - Jira transitions trigger GitHub actions

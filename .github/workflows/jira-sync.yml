@@ -32,4 +32,9 @@ jobs:
           issue-url: ${{ github.event.issue.html_url }}
           pr-branch: ${{ github.head_ref }}
           pr-url: ${{ github.event.pull_request.html_url }}
+          pr-action: ${{ github.event.action }}
+          pr-merged: ${{ github.event.pull_request.merged }}
           issue-type: 'Task'
+          transition-opened: 'In Progress'
+          transition-merged: 'Done'
+          link-title: 'GitHub PR'
