@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """Jira Integration Script
 
-Refactored to use Atlassian MCP tools via mcp_client wrapper.
-Maintains backward compatibility with existing function signatures.
+Pure REST API implementation for GitHub-to-Jira synchronization.
 
 Original file: https://colab.research.google.com/drive/1vykBrsFixtw9MSv5sC6vE5wbqkvmw85b
 """
@@ -12,7 +11,6 @@ import json
 import sys
 import os
 import time
-import re
 import argparse
 from datetime import datetime
 
@@ -24,38 +22,9 @@ JIRA_TOKEN = os.getenv(
         os.getenv("JIRA_API_TOKEN", os.getenv("JIRA_PAT", "YOUR_PAT_HERE")))
 )
 
-# Import MCP client
-try:
-    from mcp_client import atlassian_mcp
-    MCP_AVAILABLE = True
-except Exception as e:
-    MCP_AVAILABLE = False
-    print(f"[WARNING] MCP client initialization failed: {e}. Falling back to REST API.")
-
 
 def create_jira_issue(project_key, summary, description, issue_type="Task"):
-    """Creates a new Jira issue via Atlassian MCP or REST API."""
-    if MCP_AVAILABLE:
-        try:
-            result = atlassian_mcp.jira_create_issue(
-                project_key=project_key,
-                summary=summary,
-                description=description,
-                issue_type=issue_type
-            )
-            # Parse issue key from MCP response
-            match = re.search(r'([A-Z]+-\d+)', result)
-            if match:
-                issue_key = match.group(1)
-                print(f"Successfully created issue: {issue_key}")
-                return issue_key
-            else:
-                print(f"Failed to parse issue key from response: {result}")
-                return None
-        except Exception as e:
-            print(f"[WARNING] MCP call failed: {e}. Falling back to REST API.")
-    
-    # Fallback to direct REST API
+    """Creates a new Jira issue via REST API."""
     url = f"{JIRA_URL}/rest/api/2/issue"
     headers = {
         "Authorization": f"Bearer {JIRA_TOKEN}",
@@ -82,19 +51,7 @@ def create_jira_issue(project_key, summary, description, issue_type="Task"):
 
 
 def add_comment(issue_key, comment_body):
-    """Adds a comment to an existing Jira issue via Atlassian MCP or REST API."""
-    if MCP_AVAILABLE:
-        try:
-            result = atlassian_mcp.jira_add_comment(
-                issue_key=issue_key,
-                comment=comment_body
-            )
-            print(f"Successfully added comment to {issue_key}")
-            return True
-        except Exception as e:
-            print(f"[WARNING] MCP call failed: {e}. Falling back to REST API.")
-    
-    # Fallback to direct REST API
+    """Adds a comment to an existing Jira issue via REST API."""
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/comment"
     headers = {
         "Authorization": f"Bearer {JIRA_TOKEN}",
@@ -114,31 +71,7 @@ def add_comment(issue_key, comment_body):
 
 
 def get_issue_details(issue_key):
-    """Retrieves details of a Jira issue via Atlassian MCP or REST API."""
-    if MCP_AVAILABLE:
-        try:
-            result = atlassian_mcp.jira_get_issue(issue_key=issue_key)
-            # MCP returns JSON string, parse it
-            if isinstance(result, str):
-                issue_data = json.loads(result)
-            else:
-                issue_data = result
-            
-            return {
-                "key": issue_data.get("key"),
-                "summary": issue_data.get("summary"),
-                "description": issue_data.get("description"),
-                "status": issue_data.get("status"),
-                "assignee": issue_data.get("assignee"),
-                "created": issue_data.get("created"),
-                "updated": issue_data.get("updated"),
-                "issue_type": issue_data.get("issue_type"),
-                "priority": issue_data.get("priority")
-            }
-        except Exception as e:
-            print(f"[WARNING] MCP call failed: {e}. Falling back to REST API.")
-    
-    # Fallback to direct REST API
+    """Retrieves details of a Jira issue via REST API."""
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}"
     headers = {
         "Authorization": f"Bearer {JIRA_TOKEN}",
@@ -167,24 +100,7 @@ def get_issue_details(issue_key):
 
 
 def change_issue_status(issue_key, transition_name):
-    """Changes the status of a Jira issue by transitioning it via Atlassian MCP or REST API."""
-    if MCP_AVAILABLE:
-        try:
-            result = atlassian_mcp.jira_transition_issue(
-                issue_key=issue_key,
-                transition_name=transition_name
-            )
-            # Check if transition was successful
-            if "Successfully transitioned" in result or "successfully" in result.lower():
-                print(f"Successfully transitioned {issue_key} to '{transition_name}'")
-                return True
-            else:
-                print(f"Failed to transition: {result}")
-                return False
-        except Exception as e:
-            print(f"[WARNING] MCP call failed: {e}. Falling back to REST API.")
-    
-    # Fallback to direct REST API
+    """Changes the status of a Jira issue by transitioning it via REST API."""
     url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/transitions"
     headers = {
         "Authorization": f"Bearer {JIRA_TOKEN}",
@@ -230,7 +146,7 @@ def change_issue_status(issue_key, transition_name):
         return False
 
 def create_jira_subtask(parent_key, summary, description):
-    """Creates a Jira subtask linked to a parent issue via Atlassian MCP or REST API.
+    """Creates a Jira subtask linked to a parent issue via REST API.
     
     Args:
         parent_key (str): Parent issue key (e.g., 'AQD-1234')
@@ -245,27 +161,6 @@ def create_jira_subtask(parent_key, summary, description):
     
     project_key = parent_key.split('-')[0]
     
-    if MCP_AVAILABLE:
-        try:
-            result = atlassian_mcp.jira_create_issue(
-                project_key=project_key,
-                summary=summary,
-                description=description,
-                issue_type="Sub-task"
-            )
-            # Parse subtask key from response
-            match = re.search(r'([A-Z]+-\d+)', result)
-            if match:
-                subtask_key = match.group(1)
-                print(f"[{timestamp}] Successfully created subtask: {subtask_key}")
-                return subtask_key
-            else:
-                print(f"[{timestamp}] Failed to parse subtask key from response: {result}")
-                return None
-        except Exception as e:
-            print(f"[{timestamp}] [WARNING] MCP call failed: {e}. Falling back to REST API.")
-    
-    # Fallback to direct REST API
     url = f"{JIRA_URL}/rest/api/2/issue"
     headers = {
         "Authorization": f"Bearer {JIRA_TOKEN}",
@@ -294,10 +189,7 @@ def create_jira_subtask(parent_key, summary, description):
         return None
 
 def link_jira_issues(issue_key1, issue_key2, link_type="relates to"):
-    """Links two Jira issues together.
-    
-    NOTE: Atlassian MCP does not provide a tool for linking issues.
-    This function uses direct REST API access as a fallback.
+    """Links two Jira issues together via REST API.
     
     Args:
         issue_key1 (str): First issue key (e.g., 'AQD-1234')
@@ -338,8 +230,6 @@ def link_jira_issues(issue_key1, issue_key2, link_type="relates to"):
 
 def retry_api_call(func, max_retries=3, backoff_factor=2):
     """Retry wrapper for Jira API calls with exponential backoff.
-    
-    Works with both REST API and MCP tool calls.
     
     Args:
         func (callable): Function to retry
