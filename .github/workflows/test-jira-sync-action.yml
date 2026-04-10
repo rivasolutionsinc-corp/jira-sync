@@ -24,7 +24,7 @@ jobs:
         with:
           jira-url: 'https://cmext.ahrq.gov/jira'
           jira-username: ${{ secrets.JIRA_USERNAME }}
-          jira-api-token: ${{ secrets.JIRA_API_TOKEN }}
+          jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
           project-key: 'CLOUD'
           event-name: ${{ github.event.inputs.event_type || github.event_name }}
           issue-title: 'Test Issue from Action'

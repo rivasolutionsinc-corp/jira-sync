@@ -1,16 +1,24 @@
 name: 'Jira Sync'
-description: 'Sync GitHub Issues and PRs to a self-hosted Jira Data Center instance via Atlassian MCP'
+description: >
+  Sync GitHub Issues and PRs to a self-hosted Jira Data Center instance via
+  the Atlassian MCP image. Authenticates using a Jira Data Center Personal
+  Access Token (PAT) together with a Jira login username. This action does NOT
+  support Jira Cloud API tokens or email-based authentication.
 author: 'AHRQ DevOps'
 
 inputs:
   jira-url:
-    description: 'Base URL of the Jira instance (e.g. https://cmext.ahrq.gov/jira)'
+    description: 'Base URL of the self-hosted Jira Data Center instance (e.g. https://cmext.ahrq.gov/jira)'
     required: true
   jira-username:
-    description: 'Jira username or email'
+    description: >
+      Jira Data Center login username (the username used to log in to Jira,
+      not an email address). Required when using Personal Access Token auth.
     required: true
-  jira-api-token:
-    description: 'Jira API Token'
+  jira-personal-token:
+    description: >
+      Personal Access Token (PAT) generated in Jira Data Center under
+      Profile > Personal Access Tokens. This is NOT a Jira Cloud API token.
     required: true
   project-key:
     description: 'Jira project key (e.g. CLOUD)'
@@ -45,7 +53,7 @@ runs:
   env:
     JIRA_URL: ${{ inputs.jira-url }}
     JIRA_USERNAME: ${{ inputs.jira-username }}
-    JIRA_API_TOKEN: ${{ inputs.jira-api-token }}
+    JIRA_PERSONAL_TOKEN: ${{ inputs.jira-personal-token }}
     PROJECT_KEY: ${{ inputs.project-key }}
     EVENT_NAME: ${{ inputs.event-name }}
     ISSUE_TITLE: ${{ inputs.issue-title }}
