@@ -207,7 +207,33 @@ class MCPLifecycleClient:
         
         return None
     
-    def terminate(self) -> bool:
+    def add_jira_comment(self, issue_key: str, comment: str) -> bool:
+        """Add a comment to an existing Jira issue via MCP tool call."""
+        print(f"\n[3/4] Adding comment to Jira issue {issue_key}...")
+        
+        tool_call = {
+            "jsonrpc": "2.0",
+            "id": self.request_id,
+            "method": "tools/call",
+            "params": {
+                "name": "jira_add_comment",
+                "arguments": {
+                    "issue_key": issue_key,
+                    "comment": comment
+                }
+            }
+        }
+        self.request_id += 1
+        
+        response = self.send_request(tool_call)
+        if not response or "error" in response:
+            print(f"✗ Tool call failed: {response}", file=sys.stderr)
+            return False
+            
+        print(f"✓ Comment added to {issue_key}")
+        return True
+     
+     def terminate(self) -> bool:
         """Gracefully terminate the MCP server connection."""
         print("\n[4/4] Terminating MCP connection...")
         
@@ -254,25 +280,32 @@ class MCPLifecycleClient:
                 self.terminate()
                 return None
             
-            # Route event and create issue
+            # Route event
+            import re
             if event_name == "issues":
-                summary = issue_title
-                description = f"GitHub issue: {issue_url}"
+                # Create new issue for GitHub issue
+                issue_key = self.create_jira_issue(
+                    project_key=project_key,
+                    summary=issue_title,
+                    description=f"GitHub issue: {issue_url}",
+                    issue_type=issue_type
+                )
             elif event_name == "pull_request":
-                summary = f"PR: {pr_branch}"
-                description = f"GitHub pull request: {pr_url}"
+                # Extract Jira key from branch (e.g., feature/CLOUD-1927)
+                match = re.search(r'([A-Z]+-\d+)', pr_branch)
+                if match:
+                    target_issue_key = match.group(1)
+                    comment_text = f"New PR Activity: {pr_url}\nBranch: {pr_branch}"
+                    success = self.add_jira_comment(target_issue_key, comment_text)
+                    issue_key = target_issue_key if success else None
+                else:
+                    print(f"⚠ No Jira key found in branch name: {pr_branch}")
+                    self.terminate()
+                    return "SKIPPED"  # Graceful exit if no Jira key
             else:
                 print(f"✗ Unsupported event type: {event_name}", file=sys.stderr)
                 self.terminate()
                 return None
-            
-            # Create issue
-            issue_key = self.create_jira_issue(
-                project_key=project_key,
-                summary=summary,
-                description=description,
-                issue_type=issue_type
-            )
             
             # Terminate
             self.terminate()
