@@ -76,8 +76,7 @@ def create_jira_issue(project_key, summary, description, issue_type="Task"):
         print(f"Successfully created issue: {response.json()['key']}")
         return response.json()['key']
     else:
-        print(f"Failed to create issue. Status code: {response.status_code}")
-        print(response.text)
+        print(f"Failed to create issue. HTTP {response.status_code}: Unable to create issue in Jira. Check project key and issue type.")
         return None
 
 
@@ -109,8 +108,7 @@ def add_comment(issue_key, comment_body):
         print(f"Successfully added comment to {issue_key}")
         return True
     else:
-        print(f"Failed to add comment. Status code: {response.status_code}")
-        print(response.text)
+        print(f"Failed to add comment. HTTP {response.status_code}: Unable to add comment to issue. Check issue key and permissions.")
         return False
 
 
@@ -163,8 +161,7 @@ def get_issue_details(issue_key):
             "priority": issue_data.get("fields", {}).get("priority", {}).get("name")
         }
     else:
-        print(f"Failed to get issue details. Status code: {response.status_code}")
-        print(response.text)
+        print(f"Failed to get issue details. HTTP {response.status_code}: Unable to retrieve issue. Check issue key and permissions.")
         return None
 
 
@@ -197,8 +194,7 @@ def change_issue_status(issue_key, transition_name):
     response = requests.get(url, headers=headers)
     
     if response.status_code != 200:
-        print(f"Failed to get transitions. Status code: {response.status_code}")
-        print(response.text)
+        print(f"Failed to get transitions. HTTP {response.status_code}: Unable to retrieve available transitions. Check issue key and permissions.")
         return False
     
     transitions = response.json().get("transitions", [])
@@ -229,8 +225,7 @@ def change_issue_status(issue_key, transition_name):
         print(f"Successfully transitioned {issue_key} to '{transition_name}'")
         return True
     else:
-        print(f"Failed to transition issue. Status code: {response.status_code}")
-        print(response.text)
+        print(f"Failed to transition issue. HTTP {response.status_code}: Unable to transition issue. Check transition ID and issue state.")
         return False
 
 def create_jira_subtask(parent_key, summary, description):
@@ -294,8 +289,7 @@ def create_jira_subtask(parent_key, summary, description):
         print(f"[{timestamp}] Successfully created subtask: {subtask_key}")
         return subtask_key
     else:
-        print(f"[{timestamp}] Failed to create subtask. Status code: {response.status_code}")
-        print(f"Response: {response.text}")
+        print(f"[{timestamp}] Failed to create subtask. HTTP {response.status_code}: Unable to create subtask. Check parent issue key and permissions.")
         return None
 
 def link_jira_issues(issue_key1, issue_key2, link_type="relates to"):
@@ -335,11 +329,10 @@ def link_jira_issues(issue_key1, issue_key2, link_type="relates to"):
             print(f"[{timestamp}] Successfully linked issues")
             return True
         else:
-            print(f"[{timestamp}] Failed to link issues. Status code: {response.status_code}")
-            print(f"Response: {response.text}")
+            print(f"[{timestamp}] Failed to link issues. HTTP {response.status_code}: Unable to link issues. Check issue keys and link type.")
             return False
     except Exception as e:
-        print(f"[{timestamp}] Exception linking issues: {e}")
+        print(f"[{timestamp}] Failed to link issues due to {type(e).__name__}")
         return False
 
 def retry_api_call(func, max_retries=3, backoff_factor=2):
