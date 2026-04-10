@@ -9,8 +9,11 @@ and safely terminates the connection.
 
 import json
 import sys
+import os
 import subprocess
 import argparse
+import queue
+import threading
 import time
 from typing import Optional, Dict, Any
 
@@ -30,20 +33,24 @@ class MCPLifecycleClient:
         """Start the MCP server Docker container."""
         try:
             print("Starting MCP server...")
+            # Pass JIRA_PERSONAL_TOKEN via the subprocess environment instead of
+            # embedding it in argv, to avoid secret exposure in process listings.
+            child_env = {**os.environ, "JIRA_PERSONAL_TOKEN": self.jira_personal_token}
             self.process = subprocess.Popen(
                 [
                     "docker", "run",
                     "-i", "--rm",
                     "-e", f"JIRA_URL={self.jira_url}",
                     "-e", f"JIRA_USERNAME={self.jira_username}",
-                    "-e", f"JIRA_PERSONAL_TOKEN={self.jira_personal_token}",
+                    "-e", "JIRA_PERSONAL_TOKEN",
                     "ghcr.io/sooperset/mcp-atlassian:latest"
                 ],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=None,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                env=child_env
             )
             print("✓ MCP server started")
             return True
@@ -51,6 +58,28 @@ class MCPLifecycleClient:
             print(f"✗ Failed to start MCP server: {e}", file=sys.stderr)
             return False
     
+    def _read_line_with_timeout(self, timeout: float = 30.0) -> Optional[str]:
+        """Read a line from stdout, returning None if timeout expires."""
+        result_queue: queue.Queue = queue.Queue()
+
+        def _reader():
+            try:
+                line = self.process.stdout.readline()
+                result_queue.put(line)
+            except Exception:
+                result_queue.put(None)
+
+        thread = threading.Thread(target=_reader, daemon=True)
+        thread.start()
+        try:
+            return result_queue.get(timeout=timeout)
+        except queue.Empty:
+            print(
+                f"✗ Timed out waiting for MCP server response after {timeout}s",
+                file=sys.stderr,
+            )
+            return None
+
     def send_request(self, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Send a JSON-RPC request and read the response."""
         if not self.process or not self.process.stdin or not self.process.stdout:
@@ -64,8 +93,8 @@ class MCPLifecycleClient:
             self.process.stdin.write(request_json + "\n")
             self.process.stdin.flush()
             
-            # Read response
-            response_line = self.process.stdout.readline()
+            # Read response (with timeout to avoid hanging indefinitely)
+            response_line = self._read_line_with_timeout()
             if not response_line:
                 print("✗ No response from MCP server", file=sys.stderr)
                 return None
@@ -293,7 +322,13 @@ def main():
     
     if issue_key:
         print(f"\n✓ Jira sync completed successfully.")
-        print(f"::set-output name=jira-key::{issue_key}")
+        github_output = os.environ.get("GITHUB_OUTPUT", "")
+        if github_output:
+            with open(github_output, "a") as f:
+                f.write(f"jira-key={issue_key}\n")
+        else:
+            # Fallback for local testing outside a GitHub Actions runner
+            print(f"jira-key={issue_key}")
         sys.exit(0)
     else:
         print(f"\n✗ Jira sync failed.", file=sys.stderr)
