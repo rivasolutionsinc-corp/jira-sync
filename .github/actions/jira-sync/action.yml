@@ -52,4 +52,3 @@ runs:
     ISSUE_URL: ${{ inputs.issue-url }}
     PR_BRANCH: ${{ inputs.pr-branch }}
     PR_URL: ${{ inputs.pr-url }}
-    ISSUE_TYPE: ${{ inputs.issue-type }}
