@@ -10,6 +10,7 @@ on:
       - develop
       - stage
       - main
+      - 'feature/**'
     tags:
       - 'v*.*.*'
   create:
@@ -127,6 +128,37 @@ jobs:
           transition-tag: 'Deployed'
           deployment-stage: 'production'
           deployment-branch: 'main'
+
+  # Handle feature branch pushes with Jira keys
+  handle-feature-branch-push:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref_name, 'feature/') && !startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log feature branch push
+        run: |
+          echo "Feature Branch Push Detected"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+
+      - name: Prepare action directory
+        run: cp jira_integration_script.py .github/actions/jira-sync/
+
+      - name: Handle feature branch push (In Progress)
+        uses: ./.github/actions/jira-sync
+        with:
+          jira-url: ${{ env.JIRA_URL }}
+          jira-username: ${{ secrets.JIRA_USERNAME }}
+          jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
+          project-key: ${{ env.PROJECT_KEY }}
+          event-name: 'push'
+          push-branch: ${{ github.ref_name }}
+          deployment-stage: 'development'
+          deployment-branch: ${{ github.ref_name }}
 
   # Handle tag creation events (production releases)
   handle-tag-creation:
