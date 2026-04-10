@@ -321,7 +321,8 @@ def link_github_pr_remote(issue_key, pr_url, pr_title):
         
         response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=30)
         
-        if response.status_code == 201:
+        # Accept both 200 and 201 as success (Jira may return either)
+        if response.status_code in [200, 201]:
             log_action(f"Successfully linked GitHub PR to {issue_key}", level="INFO",
                        pr_url=pr_url)
             return True

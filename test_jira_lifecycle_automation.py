@@ -200,8 +200,24 @@ def test_link_jira_issues():
         jira.JIRA_URL = TEST_CONFIG["jira_url"]
         jira.JIRA_TOKEN = TEST_CONFIG["jira_token"]
         
-        # Try different link types - start with "blocks" which is commonly available
-        link_types_to_try = ["blocks", "is blocked by", "relates to", "duplicates"]
+        # Try different link types - use REST API names (not UI display names)
+        # REST API uses the "name" field from /rest/api/2/issueLinkType
+        # Examples: "Blocks", "Duplicate", "Dependency", "Child-Issue", etc.
+        link_types_to_try = [
+            "Blocks",
+            "Duplicate",
+            "Dependency",
+            "Child-Issue",
+            "Cloners",
+            "Builds",
+            "Causes",
+            "Cause",
+            "Defines",
+            "Describes",
+            "Defect",
+            "Backfill",
+            "Current Fill"
+        ]
         result = False
         used_link_type = None
         
