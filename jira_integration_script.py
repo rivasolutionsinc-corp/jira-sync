@@ -76,7 +76,7 @@ def create_jira_issue(project_key, summary, description, issue_type="Task"):
         return response.json()['key']
     else:
         print(f"Failed to create issue. HTTP {response.status_code}: Unable to create issue in Jira. Check project key and issue type.")
-        return False
+        return None
 
 
 def add_comment(issue_key, comment_body):
