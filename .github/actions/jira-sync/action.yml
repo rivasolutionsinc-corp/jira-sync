@@ -53,7 +53,7 @@ outputs:
 
 runs:
   using: 'docker'
-  image: 'docker://ghcr.io/sooperset/mcp-atlassian:latest'
+  image: 'Dockerfile'
   env:
     JIRA_URL: ${{ inputs.jira-url }}
     JIRA_USERNAME: ${{ inputs.jira-username }}
