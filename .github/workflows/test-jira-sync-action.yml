@@ -25,7 +25,7 @@ jobs:
       - name: Test Jira Sync Action
         uses: ./.github/actions/jira-sync
         with:
-          jira-url: 'https://your-jira-instance.com/jira'
+          jira-url: ${{ secrets.JIRA_URL }}
           jira-username: ${{ secrets.JIRA_USERNAME }}
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
           project-key: 'CLOUD'
