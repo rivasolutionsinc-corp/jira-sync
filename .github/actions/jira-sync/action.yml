@@ -8,22 +8,21 @@ inputs:
   jira-url:
     description: 'Base URL of the self-hosted Jira Data Center instance (e.g. https://your-jira-instance.com/jira)'
     required: true
-  jira-username:
+  jira-token:
     description: >
-      Jira Data Center login username (the username used to log in to Jira,
-      not an email address). Required when using Personal Access Token auth.
-    required: true
-  jira-personal-token:
-    description: >
-      Personal Access Token (PAT) generated in Jira Data Center under
-      Profile > Personal Access Tokens. This is NOT a Jira Cloud API token.
+      Jira API token for authentication. For Jira Cloud, use an API token.
+      For Jira Data Center, use a Personal Access Token (PAT).
     required: true
   project-key:
     description: 'Jira project key (e.g. CLOUD)'
     required: true
   event-name:
-    description: 'GitHub event name: issues or pull_request'
+    description: 'GitHub event name: issues, pull_request, or create'
     required: true
+  event-action:
+    description: 'GitHub event action (opened, closed, synchronize, created)'
+    required: false
+    default: 'created'
   issue-title:
     description: 'GitHub Issue title (for issues event)'
     required: false
@@ -48,18 +47,22 @@ inputs:
     description: 'PR action type (opened, synchronize, closed)'
     required: false
     default: ''
-  pr-merged:
-    description: 'Flag indicating if PR is merged'
+  is-merged:
+    description: 'Flag indicating if PR is merged (true/false)'
     required: false
     default: 'false'
-  transition-opened:
-    description: 'Jira transition to apply when PR is opened'
+  transition-on-open:
+    description: 'Jira transition to apply when PR/Issue is opened'
     required: false
-    default: ''
-  transition-merged:
+    default: 'In Review'
+  transition-on-merge:
     description: 'Jira transition to apply when PR is merged'
     required: false
-    default: ''
+    default: 'Done'
+  transition-on-tag:
+    description: 'Jira transition to apply when tag is created'
+    required: false
+    default: 'Deployed'
   link-title:
     description: 'Custom title for GitHub PR link'
     required: false
@@ -71,7 +74,7 @@ inputs:
   target-branch:
     description: 'Target branch for deployment (develop, stage, main)'
     required: false
-    default: ''
+    default: 'main'
   transition-tag:
     description: 'Jira transition to apply for tag/push events'
     required: false
@@ -107,17 +110,17 @@ runs:
   image: 'Dockerfile'
   args:
     - ${{ inputs.jira-url }}
-    - ${{ inputs.jira-username }}
-    - ${{ inputs.jira-personal-token }}
+    - ${{ inputs.jira-token }}
     - ${{ inputs.project-key }}
     - ${{ inputs.event-name }}
+    - ${{ inputs.event-action }}
     - ${{ inputs.issue-title }}
     - ${{ inputs.issue-url }}
     - ${{ inputs.pr-branch }}
     - ${{ inputs.pr-url }}
     - ${{ inputs.issue-type }}
-    - ${{ inputs.pr-action }}
-    - ${{ inputs.pr-merged }}
-    - ${{ inputs.transition-opened }}
-    - ${{ inputs.transition-merged }}
+    - ${{ inputs.is-merged }}
+    - ${{ inputs.transition-on-open }}
+    - ${{ inputs.transition-on-merge }}
+    - ${{ inputs.transition-on-tag }}
     - ${{ inputs.link-title }}
