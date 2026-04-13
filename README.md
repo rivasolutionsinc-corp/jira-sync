@@ -1,73 +1,73 @@
 # Jira & GitHub Workflow Automation
 
-Automated integration between GitHub and self-hosted Jira (cmext.ahrq.gov/jira) for the AHRQ Drupal ecosystem using a containerized Docker Action.
+A reusable, public GitHub Action that automates the lifecycle between GitHub and self-hosted Jira (Data Center / Server) instances. Built as a containerized Docker Action for reliable, stateless REST API communication.
 
 ## Overview
 
-This project automates the lifecycle between GitHub and Jira, enabling seamless synchronization of issues and pull requests. It uses a containerized Docker Action for reliable, stateless communication with Jira via REST API.
+This project provides a **project-agnostic, multi-tenant** GitHub Action that synchronizes GitHub Issues and Pull Requests with Jira. It supports dynamic state mapping, GitFlow-aware branch strategies, and Jenkins deployment pipeline alignment.
 
-**Current Status:** ✅ Production-Ready (Phase 2: Production-Ready REST API - CLOUD-1961)
+**Current Status:** ✅ Production-Ready | Public Release Hardened (Phase 3: Deployment Orchestration)
+
+**Branch:** `feature/public-release-workflow-hardening`
+
+---
 
 ## Features
 
-### Current Implementation (Phase 2: Production-Ready REST API)
-- **Pure REST API** → No MCP dependencies, direct Jira REST API calls
-- **Production Hardening** → Input validation, rate limiting, retry logic, timeouts
-- **Connection Pooling** → Efficient HTTP session management with automatic retries
-- **Comprehensive Validation** → All inputs validated before API calls
-- **Structured Logging** → Detailed logs with context for debugging
-- **Type Hints** → Full type annotations for better IDE support
+### Core Capabilities
+- **Pure REST API** — No MCP dependencies, direct Jira REST API calls with Bearer token auth
+- **Production Hardening** — Input validation, rate limiting, retry logic with exponential backoff, timeouts
+- **Connection Pooling** — Efficient HTTP session management with automatic retries
+- **Structured Logging** — Timestamped, context-rich logs for debugging
+- **Type Hints** — Full type annotations throughout the Python codebase
 
-### Phase 1 Features (Preserved)
-- **GitHub Issue Opened** → Automatically creates a Jira Task in CLOUD project
-- **GitHub PR Opened/Synchronized** → Automatically adds comments to linked Jira issue with PR details
-- **Configurable Transitions** → Transition issues on PR opened, merged, or push events
-- **Push Event Support** → Automatically transition issues when code is pushed to target branches
-- **Jira Key Extraction** → Automatically extracts Jira key from branch name (e.g., `feature/CLOUD-1927`)
-- **Customizable Link Titles** → Configure custom titles for GitHub PR links in Jira
+### GitHub Event Lifecycle
+- **Issue Opened** → Creates a Jira Task in the configured project
+- **PR Opened** → Comments on linked Jira issue, links PR via Remote Issue Link API
+- **PR Synchronized** → Updates remote link on Jira issue
+- **PR Merged** → Transitions Jira issue (configurable: e.g., `Done` or `In QA`)
+- **Tag Created** → Transitions Jira issue to production state (e.g., `Deployed`)
 
-### Docker Container Action (CLOUD-1929)
-- **Containerized Action** - Published to GHCR for cross-repository reusability
-- **8–24x Faster Startup** - 5–15 seconds vs 60–120 seconds
-- **61% Simpler Workflows** - Reduced complexity from 97 to 38 lines
-- **Cross-Organization Reuse** - Use in any GitHub repository
+### Dynamic State Mapping (GitFlow/Jenkins Alignment)
+- PR merged to `stage` → `In QA` (triggers Stage Deploy)
+- PR merged to `main` → `Done` (triggers Prod-Blue Deploy)
+- Tag created (`v*.*.*`) → `Deployed`
+- All transitions are **fully configurable** via workflow inputs
 
-### Technology Stack
-- **Container:** `ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest`
-- **Transport:** REST API with Bearer token authentication
-- **Protocol:** HTTP/JSON
-- **Authentication:** Jira Personal Access Token
-- **CI/CD:** GitHub Actions with Docker Container Action
+### Docker Container Action
+- **Self-contained** — `jira_integration_script.py` bundled inside the action directory
+- **8–24x Faster Startup** — 5–15 seconds vs 60–120 seconds for composite actions
+- **Cross-Organization Reuse** — Use in any GitHub repository via `rivasolutionsinc-corp/jira-sync/.github/actions/jira-sync@main`
+
+---
 
 ## Quick Start
 
 ### Prerequisites
-1. **GitHub Repository Secrets:**
-   - `JIRA_TOKEN`: Jira Personal Access Token (Server/Data Center)
-   - `JIRA_PROJECT_KEY` (optional): Jira project key (defaults to `CLOUD`)
 
-2. **Jira Configuration:**
-   - Project key (e.g., `CLOUD`)
-   - Personal Access Token with API access
-   - Sufficient permissions to create issues and add comments
+Configure the following **GitHub Repository Secrets**:
 
-3. **GitHub Actions:**
-   - Workflow file: `.github/workflows/jira-sync.yml`
-   - Triggers on: issues opened, PR opened/synchronized
+| Secret | Required | Description |
+|--------|----------|-------------|
+| `JIRA_URL` | ✅ Yes | Your Jira instance URL (e.g., `https://your-org.atlassian.net`) |
+| `JIRA_TOKEN` | ✅ Yes | Jira Personal Access Token (Data Center) or API Token (Cloud) |
+| `JIRA_PROJECT_KEY` | ✅ Yes | Your Jira project key (e.g., `PROJ`) |
 
 ### Branch Naming Convention
 
-All feature branches **must** follow this naming pattern:
+All feature branches **must** follow this naming pattern for Jira key extraction:
 
 ```
-feature/PROJECT-KEY-ISSUE-NUMBER
+feature/PROJECT-KEY-ISSUE-NUMBER[-description]
 ```
 
 **Examples:**
-- `feature/CLOUD-1927` - Links to Jira issue CLOUD-1927
-- `feature/AQD-1234` - Links to Jira issue AQD-1234
+- `feature/PROJ-1234` — Links to Jira issue PROJ-1234
+- `feature/PROJ-1234-add-login-page` — Links to Jira issue PROJ-1234
 
-**Important:** Branches not matching this pattern will not trigger Jira automation.
+> **Important:** Branches not matching this pattern will be skipped gracefully (not an error).
+
+---
 
 ## Architecture
 
@@ -75,411 +75,425 @@ feature/PROJECT-KEY-ISSUE-NUMBER
 
 ```
 GitHub Repository
-    ↓
+    ↓ (issues, pull_request, create events)
 GitHub Actions Workflow (.github/workflows/jira-sync.yml)
     ↓
-Docker Container Action (ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest)
-    ↓
-Jira Server (cmext.ahrq.gov/jira)
+Docker Container Action (.github/actions/jira-sync/)
+    ↓ (REST API + Bearer token)
+Jira Data Center / Server
 ```
 
 ### Workflow Execution Flow
 
-1. **Event Trigger** - GitHub issue opened or PR opened/synchronized
-2. **Action Start** - Docker Container Action starts with environment variables
-3. **Jira Operation** - Calls appropriate Jira REST API (create issue or add comment)
-4. **Result** - Issue created or comment added to Jira
+1. **Event Trigger** — GitHub issue opened, PR lifecycle event, or tag creation
+2. **Guard Condition** — `create` events filtered to tags only (not branch creation)
+3. **Debug Logging** — Event context printed for troubleshooting
+4. **Action Execution** — Docker container starts, entrypoint.sh maps inputs to CLI args
+5. **Jira Operation** — Python script calls appropriate Jira REST API endpoint
+6. **State Transition** — Issue transitioned based on dynamic mapping
 
-### Key Configuration
+### Repository Structure
 
-**Container:** `ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest`
-- Containerized Python script with Jira integration
-- Stateless operation suitable for ephemeral GitHub Actions runners
-- REST API communication with Jira
+```
+jira-sync/
+├── .github/
+│   ├── actions/
+│   │   └── jira-sync/              # Reusable Docker-based Action
+│   │       ├── Dockerfile
+│   │       ├── action.yml          # Action manifest with all inputs
+│   │       ├── entrypoint.sh       # Maps action inputs to CLI args
+│   │       ├── jira_integration_script.py  # Bundled Python script
+│   │       └── requirements.txt
+│   └── workflows/
+│       ├── jira-sync.yml           # Main integration workflow
+│       ├── test-published-image.yml
+│       └── verify-jira-access.yml
+├── hooks/                          # Git hooks for memory management
+│   ├── install-hooks.sh
+│   └── post-commit
+├── tests/                          # Test suites
+│   ├── test_jira_lifecycle_automation.py
+│   ├── test_phase1_generalization.py
+│   ├── test_phase2_production_hardening.py
+│   └── test_phase3_deployment_orchestration.py
+├── .env.example
+├── .gitignore
+├── docker-compose.yml              # Local testing/dev environment
+├── jira_integration_script.py      # Core REST API Logic (reference copy)
+└── README.md
+```
 
-**Authentication:** `JIRA_TOKEN` environment variable
-- Bearer token authentication
-- Correct for Jira Server/Data Center (not Cloud)
+---
 
 ## Workflow File
 
 ### `.github/workflows/jira-sync.yml`
 
-Main workflow file that orchestrates Jira integrations:
+```yaml
+name: Jira Sync
 
-**Triggers:**
-- `issues.opened` - GitHub issue created
-- `pull_request.opened` - PR created
-- `pull_request.synchronize` - New commits pushed to PR
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened, synchronize, closed]
+  create:  # Tag creation only (branch creation filtered by job condition)
+  workflow_dispatch:
+    inputs:
+      jira-url:
+        description: 'JIRA instance URL (optional override)'
+        required: false
+      project-key:
+        description: 'JIRA project key (optional override)'
+        required: false
 
-**Jobs:**
-1. `sync-to-jira` - Handles GitHub issues and PRs
+jobs:
+  sync-to-jira:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'create' || github.event.ref_type == 'tag'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Debug Event Context
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Action: ${{ github.event.action }}"
+          echo "Target Branch: ${{ github.base_ref }}"
+      - uses: ./.github/actions/jira-sync
+        with:
+          jira-url: ${{ github.event.inputs.jira-url || secrets.JIRA_URL }}
+          jira-token: ${{ secrets.JIRA_TOKEN }}
+          project-key: ${{ github.event.inputs.project-key || secrets.JIRA_PROJECT_KEY }}
+          event-name: ${{ github.event_name }}
+          event-action: ${{ github.event.action || 'created' }}
+          pr-branch: ${{ github.head_ref }}
+          pr-url: ${{ github.event.pull_request.html_url }}
+          is-merged: ${{ github.event.pull_request.merged || 'false' }}
+          target-branch: ${{ github.base_ref || 'main' }}
+          transition-on-open: 'In Review'
+          transition-on-merge: ${{ github.base_ref == 'stage' && 'In QA' || 'Done' }}
+          transition-on-tag: 'Deployed'
+```
 
-**Steps:**
-1. Call Docker Container Action with environment variables
-2. Create Jira ticket (on issue opened)
-3. Add comment to Jira (on PR opened/synchronized)
+---
 
-## Using the Published Action
+## Using the Action
 
-### In This Repository
+### In This Repository (Local Reference)
 
 ```yaml
 - uses: ./.github/actions/jira-sync
-  with:
-    jira-url: 'https://cmext.ahrq.gov/jira'
-    jira-token: ${{ secrets.JIRA_TOKEN }}
-    project-key: 'CLOUD'
-    event-name: ${{ github.event_name }}
-    pr-branch: ${{ github.head_ref }}
-    pr-url: ${{ github.event.pull_request.html_url }}
-```
-
-### In Other Repositories (Using Published Image)
-
-```yaml
-- uses: rivasolutionsinc-corp/jira-sync/.github/actions/jira-sync@v1.0.0
   with:
     jira-url: ${{ secrets.JIRA_URL }}
     jira-token: ${{ secrets.JIRA_TOKEN }}
     project-key: ${{ secrets.JIRA_PROJECT_KEY }}
     event-name: ${{ github.event_name }}
+    event-action: ${{ github.event.action || 'created' }}
     pr-branch: ${{ github.head_ref }}
     pr-url: ${{ github.event.pull_request.html_url }}
+    is-merged: ${{ github.event.pull_request.merged || 'false' }}
+    target-branch: ${{ github.base_ref || 'main' }}
+    transition-on-open: 'In Review'
+    transition-on-merge: 'Done'
+    transition-on-tag: 'Deployed'
 ```
+
+### In Other Repositories (Cross-Org Reuse)
+
+```yaml
+- uses: rivasolutionsinc-corp/jira-sync/.github/actions/jira-sync@main
+  with:
+    jira-url: ${{ secrets.JIRA_URL }}
+    jira-token: ${{ secrets.JIRA_TOKEN }}
+    project-key: ${{ secrets.JIRA_PROJECT_KEY }}
+    event-name: ${{ github.event_name }}
+    event-action: ${{ github.event.action || 'created' }}
+    pr-branch: ${{ github.head_ref }}
+    pr-url: ${{ github.event.pull_request.html_url }}
+    is-merged: ${{ github.event.pull_request.merged || 'false' }}
+    target-branch: ${{ github.base_ref || 'main' }}
+    transition-on-open: 'In Review'
+    transition-on-merge: ${{ github.base_ref == 'stage' && 'In QA' || 'Done' }}
+    transition-on-tag: 'Deployed'
+```
+
+---
+
+## Action Inputs Reference
+
+### Required Inputs
+
+| Input | Description |
+|-------|-------------|
+| `jira-url` | Jira instance base URL |
+| `jira-token` | Jira API token (PAT for Data Center, API token for Cloud) |
+| `project-key` | Jira project key (e.g., `PROJ`) |
+| `event-name` | GitHub event name (`issues`, `pull_request`, `create`) |
+
+### Optional Inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `event-action` | `created` | GitHub event action (`opened`, `closed`, `synchronize`) |
+| `issue-title` | `''` | GitHub issue title (for `issues` event) |
+| `issue-url` | `''` | GitHub issue URL (for `issues` event) |
+| `pr-branch` | `''` | PR source branch name |
+| `pr-url` | `''` | PR HTML URL |
+| `is-merged` | `false` | Whether the PR was merged |
+| `target-branch` | `main` | Target branch for deployment matching |
+| `transition-on-open` | `In Review` | Jira transition when PR/Issue is opened |
+| `transition-on-merge` | `Done` | Jira transition when PR is merged |
+| `transition-on-tag` | `Deployed` | Jira transition when tag is created |
+| `link-title` | `GitHub PR` | Custom title for GitHub PR remote links |
+| `issue-type` | `Task` | Jira issue type for new issues |
+
+---
+
+## CLI Reference
+
+The [`jira_integration_script.py`](jira_integration_script.py) can also be run directly:
+
+```bash
+# PR opened — transition to In Review
+python jira_integration_script.py \
+  --event-name pull_request \
+  --jira-url https://your-jira.atlassian.net \
+  --jira-token YOUR_TOKEN \
+  --project-key PROJ \
+  --pr-branch feature/PROJ-1234-my-feature \
+  --pr-url https://github.com/org/repo/pull/1 \
+  --event-action opened \
+  --transition-on-open "In Review"
+
+# PR merged to stage — transition to In QA
+python jira_integration_script.py \
+  --event-name pull_request \
+  --jira-url https://your-jira.atlassian.net \
+  --jira-token YOUR_TOKEN \
+  --project-key PROJ \
+  --pr-branch feature/PROJ-1234-my-feature \
+  --pr-url https://github.com/org/repo/pull/1 \
+  --event-action closed \
+  --is-merged \
+  --target-branch stage \
+  --transition-on-merge "In QA"
+
+# Tag created — transition to Deployed
+python jira_integration_script.py \
+  --event-name create \
+  --jira-url https://your-jira.atlassian.net \
+  --jira-token YOUR_TOKEN \
+  --project-key PROJ \
+  --tag-name v1.2.3-PROJ-1234 \
+  --transition-on-tag "Deployed"
+```
+
+---
 
 ## Setup & Configuration
 
-### Step 1: Create GitHub Secrets
+### Step 1: Configure GitHub Secrets
 
-1. Go to repository → Settings → Secrets and variables → Actions
-2. Create `JIRA_TOKEN`:
-   - Generate Personal Access Token in Jira
-   - Copy token value
-   - Paste into GitHub secret
-3. (Optional) Create `JIRA_PROJECT_KEY`:
-   - Set to your Jira project key (e.g., `CLOUD`)
-   - Defaults to `CLOUD` if not set
+1. Go to **Repository → Settings → Secrets and variables → Actions**
+2. Add the following secrets:
+   - `JIRA_URL` — Your Jira instance URL
+   - `JIRA_TOKEN` — Personal Access Token from Jira
+   - `JIRA_PROJECT_KEY` — Your project key
 
-### Step 2: Verify Jira Configuration
+### Step 2: Verify Jira Token Permissions
 
-1. Ensure Jira project exists (e.g., `CLOUD`)
-2. Verify Personal Access Token has:
-   - API access permission
-   - Issue creation permission
-   - Comment creation permission
-3. Test token: `curl -H "Authorization: Bearer $TOKEN" https://cmext.ahrq.gov/jira/rest/api/2/myself`
+Your Jira token must have:
+- ✅ Issue creation permission
+- ✅ Comment creation permission
+- ✅ Issue transition permission
+- ✅ Remote link creation permission
+
+Test connectivity:
+```bash
+curl -H "Authorization: Bearer $JIRA_TOKEN" \
+  https://your-jira-instance.com/jira/rest/api/2/myself
+```
 
 ### Step 3: Test the Workflow
 
 1. Create a feature branch:
    ```bash
-   git checkout -b feature/CLOUD-1927
-   git push origin feature/CLOUD-1927
+   git checkout -b feature/PROJ-1234
+   git push origin feature/PROJ-1234
    ```
 
 2. Open a Pull Request on GitHub
 
-3. Check GitHub Actions workflow logs:
-   - Go to Actions tab
-   - Click on workflow run
-   - Verify all steps completed successfully
+3. Check **Actions** tab → verify workflow completed successfully
 
 4. Verify in Jira:
-   - Check CLOUD-1927 for new comment
-   - Verify PR URL is in comment
+   - Check `PROJ-1234` for new comment and remote link
+   - Verify issue transitioned to `In Review`
+
+### Step 4: Manual Testing via Workflow Dispatch
+
+1. Go to **Actions → Jira Sync → Run workflow**
+2. Optionally override `jira-url` or `project-key` for testing
+3. Review the **Debug Event Context** step output in logs
+
+---
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### 1. "Jira client not available" Error
-**Cause:** Secret not passed to action or authentication failed
+#### "unrecognized arguments" Error
+**Cause:** Mismatch between workflow inputs and action manifest.
+
+**Solution:** Ensure [`action.yml`](.github/actions/jira-sync/action.yml) defines all inputs used in the workflow. The bundled [`jira_integration_script.py`](.github/actions/jira-sync/jira_integration_script.py) must match the root copy.
+
+#### "No Jira key found in branch name"
+**Cause:** Branch name doesn't match `PROJECT-KEY-NUMBER` pattern.
+
+**Solution:** Rename branch to follow convention (e.g., `feature/PROJ-1234`). This is a graceful skip, not an error.
+
+#### "Connection refused" / "Invalid Jira URL"
+**Cause:** `JIRA_URL` secret is incorrect or Jira is unreachable from GitHub Actions.
 
 **Solution:**
-- Verify `JIRA_TOKEN` secret is set in GitHub
-- Check secret value is correct (no extra spaces)
-- Verify token has API access permissions
-- Check action logs in GitHub Actions
+- Verify URL format: `https://your-jira-instance.com/jira`
+- Check firewall rules allow GitHub Actions IP ranges
+- Test with `verify-jira-access.yml` workflow
 
-#### 2. "Connection refused" Error
-**Cause:** Jira URL is incorrect or Jira is unreachable
+#### Docker Build Fails: "file not found"
+**Cause:** [`jira_integration_script.py`](.github/actions/jira-sync/jira_integration_script.py) missing from action directory.
 
-**Solution:**
-- Verify `JIRA_URL` is correct (e.g., `https://cmext.ahrq.gov/jira`)
-- Check network connectivity to Jira server
-- Verify firewall rules allow GitHub Actions to reach Jira
-
-#### 3. "No Jira key found in branch name"
-**Cause:** Branch name doesn't match `feature/PROJECT-KEY` pattern
-
-**Solution:**
-- Rename branch to follow convention
-- Example: `feature/CLOUD-1927`
-
-#### 4. Action Fails on First Attempt
-**Cause:** Jira server not responding yet
-
-**Solution:**
-- Retry the workflow
-- Check Jira server status
-- Verify network connectivity
+**Solution:** The script must exist in `.github/actions/jira-sync/`. Copy from root:
+```bash
+cp jira_integration_script.py .github/actions/jira-sync/
+```
 
 ### Debug Logging
 
-Enable verbose logging by checking GitHub Actions workflow logs:
+The workflow includes a **Debug Event Context** step that logs:
+- Event name and action
+- Source and target branches
+- Merge status
+- Ref type and ref value
 
-1. Go to repository → Actions tab
-2. Click on workflow run
-3. Expand job logs to see detailed output
-4. Look for:
-   - Action startup messages
-   - Jira API responses
-   - Error messages
-
-### Manual Testing
-
-Test locally with Docker:
-
-```bash
-# Pull the published image
-docker pull ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest
-
-# Run the action
-docker run --rm \
-  -e JIRA_URL="https://cmext.ahrq.gov/jira" \
-  -e JIRA_TOKEN="your-token" \
-  -e PROJECT_KEY="CLOUD" \
-  -e EVENT_NAME="pull_request" \
-  -e PR_BRANCH="feature/CLOUD-1927" \
-  -e PR_URL="https://github.com/rivasolutionsinc-corp/jira-sync/pull/1" \
-  ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest
-```
-
-## Testing
-
-### Published Image Test
-
-The repository includes automated tests for the published Docker image:
-
-**Test Workflow:** `.github/workflows/test-published-image.yml`
-- Pulls the published image from GHCR
-- Authenticates with GHCR using GITHUB_TOKEN
-- Tests Jira connectivity by listing issues
-- Validates image execution
-
-**Run Test Manually:**
-```bash
-gh workflow run test-published-image.yml
-```
-
-## Documentation
-
-Comprehensive documentation is available in `.ai-memory/`:
-
-- **00-DOCUMENTATION-SUMMARY.md** - Quick start guides by role
-- **01-ARCHITECTURE-OVERVIEW.md** - System architecture and design
-- **02-SETUP-AND-CONFIGURATION.md** - Detailed setup instructions
-- **03-WORKFLOW-OPERATION-GUIDE.md** - How the workflow operates
-- **04-TROUBLESHOOTING-GUIDE.md** - Common issues and solutions
-- **05-FUTURE-ENHANCEMENTS.md** - Roadmap and planned features
-
-## Phase 2: Production-Ready REST API (CLOUD-1961)
-
-### What's New
-
-Phase 2 removes all experimental MCP code and implements a production-ready pure REST API solution with comprehensive hardening:
-
-**Key Improvements:**
-- ✅ **Removed all MCP code** - No more conditional imports or fallback logic
-- ✅ **Pure REST API** - Direct Jira REST API calls with validation
-- ✅ **Production hardening** - Input validation, rate limiting, retry logic, timeouts
-- ✅ **Connection pooling** - Efficient HTTP session management
-- ✅ **Type hints** - Full type annotations for better IDE support
-- ✅ **52 unit tests** - 100% pass rate with comprehensive coverage
-
-### Testing
-
-Run the comprehensive test suite:
-
-```bash
-python3 -m pytest test_phase2_production_hardening.py -v
-```
-
-**Test Results:** 52 tests, 100% pass rate
-- Input validation (10 tests)
-- Jira key extraction (5 tests)
-- Rate limiting (1 test)
-- Retry logic (4 tests)
-- API functions (15 tests)
-- Event routing (7 tests)
-- Phase 1 features (5 tests)
-
-### Backward Compatibility
-
-✅ **100% backward compatible** with Phase 1
-
-- All CLI arguments work identically
-- All function signatures compatible
-- Same return types and error handling
-- Existing GitHub Actions workflows work without changes
-
-### Documentation
-
-- **Implementation Guide:** [`.ai-memory/PHASE_2_IMPLEMENTATION_COMPLETE.md`](.ai-memory/PHASE_2_IMPLEMENTATION_COMPLETE.md)
-- **Migration Guide:** [`.ai-memory/PHASE_2_MIGRATION_GUIDE.md`](.ai-memory/PHASE_2_MIGRATION_GUIDE.md)
-- **Test Suite:** `test_phase2_production_hardening.py` (52 tests, 100% pass rate)
+Review these in **Actions → [workflow run] → Debug Event Context**.
 
 ---
 
-## Phase 1: Generalized Python Toolset (CLOUD-1959)
+## Testing
 
-### New CLI Arguments
-
-Phase 1 introduces configurable event routing and transitions via CLI arguments:
-
-#### Transition Arguments
-- `--transition-opened` - Jira transition when PR is opened (e.g., "In Progress")
-- `--transition-merged` - Jira transition when PR is merged (e.g., "Done")
-- `--transition-tag` - Jira transition when pushed to target branch (e.g., "Released")
-
-#### Event Routing Arguments
-- `--target-branch` - Target branch for push event matching (e.g., "main")
-- `--pr-action` - PR action type (opened, synchronize, closed)
-- `--pr-merged` - Flag indicating PR was merged
-
-#### Link Arguments
-- `--link-title` - Custom title for GitHub PR links (default: "GitHub PR")
-
-### Example Usage
+### Run the Full Test Suite
 
 ```bash
-# PR opened with transition
-python jira_integration_script.py \
-  --event-name pull_request \
-  --jira-url https://jira.example.com \
-  --jira-token YOUR_TOKEN \
-  --project-key CLOUD \
-  --pr-branch feature/CLOUD-1234-description \
-  --pr-url https://github.com/org/repo/pull/1 \
-  --pr-action opened \
-  --transition-opened "In Progress"
+# Phase 1: Generalization tests
+python3 -m pytest tests/test_phase1_generalization.py -v
 
-# Push to main with release transition
-python jira_integration_script.py \
-  --event-name push \
-  --jira-url https://jira.example.com \
-  --jira-token YOUR_TOKEN \
-  --project-key CLOUD \
-  --push-branch main \
-  --target-branch main \
-  --transition-tag "Released"
+# Phase 2: Production hardening tests
+python3 -m pytest tests/test_phase2_production_hardening.py -v
+
+# Phase 3: Deployment orchestration tests
+python3 -m pytest tests/test_phase3_deployment_orchestration.py -v
+
+# All tests
+python3 -m pytest tests/ -v
 ```
 
-### Backward Compatibility
+### Local Docker Testing
 
-All Phase 0 workflows continue to work without modification. New arguments are optional.
+```bash
+# Build the action image locally
+docker build -t jira-sync-action .github/actions/jira-sync/
 
-### Documentation
+# Run with test inputs
+docker run --rm \
+  jira-sync-action \
+  "https://your-jira-instance.com/jira" \
+  "YOUR_TOKEN" \
+  "PROJ" \
+  "pull_request" \
+  "opened" \
+  "" "" \
+  "feature/PROJ-1234" \
+  "https://github.com/org/repo/pull/1" \
+  "Task" \
+  "false" \
+  "In Review" \
+  "Done" \
+  "Deployed" \
+  "GitHub PR"
+```
 
-- **Implementation Guide:** [`.ai-memory/PHASE_1_IMPLEMENTATION_GUIDE.md`](.ai-memory/PHASE_1_IMPLEMENTATION_GUIDE.md)
-- **Migration Guide:** [`.ai-memory/PHASE_0_TO_PHASE_1_MIGRATION_GUIDE.md`](.ai-memory/PHASE_0_TO_PHASE_1_MIGRATION_GUIDE.md)
-- **Test Suite:** `test_phase1_generalization.py` (34 tests, 100% pass rate)
+---
 
-## Future Enhancements
+## Milestone History
 
-### Phase 3: Deployment-Aware Orchestration
-- Jenkins/GitFlow integration
-- Stage promotion automation
-- Production release tracking
-- Automated deployment notifications
+| Milestone | Status | Description |
+|-----------|--------|-------------|
+| **MCP Migration & Stabilization** | ✅ Completed/Reverted | Identified silent failure bug in upstream MCP comment tool; reverted to pure REST API |
+| **Docker Container Action (CLOUD-1929)** | ✅ Completed | Containerized Python script; 15x faster startup; published to GHCR |
+| **Jenkins & GitFlow Alignment (CLOUD-1962)** | ✅ Completed | Mapped Stage Promotion and Production Release triggers to Jira states |
+| **Phase 1: Dynamic Multi-Project Support (CLOUD-1959)** | ✅ Completed | Generalized CLI; added `--transition-on-*`, `--target-branch`, `--is-merged` flags |
+| **Phase 2: Production Hardening (CLOUD-1961)** | ✅ Completed | Removed MCP code; added validation, retry logic, connection pooling; 52 tests |
+| **Phase 3: Deployment Orchestration (CLOUD-1962)** | ✅ Completed | Full GitFlow/Jenkins lifecycle automation |
+| **Public Release Hardening** | ✅ Completed | Removed hardcoded org values; parameterized secrets; added workflow_dispatch |
 
-### Phase 4: Bidirectional Sync
-- Jira transitions trigger GitHub actions
-- Webhook support
-- Conflict resolution
-
-### Phase 5: Analytics & Reporting
-- Velocity metrics
-- Cycle time tracking
-- Dashboard integration
-
-### Phase 6: Multi-Repository Support
-- Centralized Jira project
-- Multiple GitHub repositories
-- Cross-repository linking
-
-See [`05-FUTURE-ENHANCEMENTS.md`](.ai-memory/05-FUTURE-ENHANCEMENTS.md) for detailed roadmap.
+---
 
 ## Security & Compliance
 
 ### Token Management
-- `JIRA_TOKEN` stored in GitHub Secrets (encrypted)
-- Never commit tokens to repository
+- `JIRA_TOKEN` stored in GitHub Secrets (encrypted at rest)
+- Never commit tokens to the repository
 - Rotate tokens regularly (recommended: quarterly)
-
-### Branch Validation
-- Branch naming enforced: `feature/PROJECT-KEY`
-- Prevents accidental Jira key extraction
+- Use minimum required permissions
 
 ### Audit Trail
-- All Jira operations logged with:
-  - GitHub actor (who triggered)
-  - Timestamp (when)
-  - Commit SHA (what code)
-  - PR number (which PR)
+All Jira operations are logged with:
+- GitHub actor (who triggered)
+- Timestamp (when)
+- Event type and action (what happened)
+- Branch/tag name (which code)
 
 ### Rate Limiting
-- Jira API rate limits: ~10 requests/second
-- Action includes retry logic with exponential backoff
-- Monitors for rate limit errors
+- Jira API rate limits respected with exponential backoff
+- `MAX_RETRIES = 3`, `BACKOFF_FACTOR = 2`
+- `RATE_LIMIT_DELAY = 0.5s` between API calls
+
+---
 
 ## Development
 
 ### Adding New Features
 
-1. **Update `.github/workflows/jira-sync.yml`:**
-   - Add new trigger event or step
-   - Call appropriate Jira tool
-
-2. **Test locally:**
-   - Use Docker to test action startup
-   - Test Jira operations
-   - Verify integration
-
-3. **Create feature branch:**
+1. **Update [`jira_integration_script.py`](jira_integration_script.py)** — Add new CLI argument and handler logic
+2. **Update [`.github/actions/jira-sync/action.yml`](.github/actions/jira-sync/action.yml)** — Add new input definition
+3. **Update [`.github/actions/jira-sync/entrypoint.sh`](.github/actions/jira-sync/entrypoint.sh)** — Map new input to CLI arg
+4. **Sync script to action directory:**
    ```bash
-   git checkout -b feature/CLOUD-XXXX
-   git commit -am "Add new feature"
-   git push origin feature/CLOUD-XXXX
+   cp jira_integration_script.py .github/actions/jira-sync/
    ```
-
-4. **Create pull request and merge after review**
+5. **Update [`.github/workflows/jira-sync.yml`](.github/workflows/jira-sync.yml)** — Pass new input from workflow
+6. **Add tests** in `tests/`
+7. **Create feature branch, PR, and merge**
 
 ### Publishing Updates
 
-When updating the action:
+When updating the action for consumers:
 
-1. Update action files in `.github/actions/jira-sync/`
-2. Create a new version tag (e.g., `v1.1.0`)
-3. Push tag to trigger publish workflow
-4. Publish workflow automatically builds and pushes to GHCR
+1. Update all files in `.github/actions/jira-sync/`
+2. Sync `jira_integration_script.py` to action directory
+3. Create a new version tag (e.g., `v1.1.0`)
+4. Push tag — publish workflow builds and pushes to GHCR
+
+---
 
 ## References
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
 - [GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 - [Jira REST API v2 Documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v2/)
+- [Jira Remote Issue Links API](https://developer.atlassian.com/cloud/jira/platform/rest/v2/api-group-issue-remote-links/)
 - [GitHub Webhook Events](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads)
-
-## Support
-
-For issues or questions:
-1. Check troubleshooting section above
-2. Review workflow logs in GitHub Actions
-3. Review comprehensive documentation in `.ai-memory/`
-4. Contact DevOps team
 
 ## License
 
-This project is part of the AHRQ Drupal ecosystem and follows AHRQ licensing guidelines.
+MIT License — See [LICENSE](LICENSE) for details.
