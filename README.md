@@ -583,7 +583,16 @@ services:
 
 ### MCP Server Configuration
 
-The jira-sync MCP server is configured in Roo Code's `mcp_settings.json`:
+The jira-sync MCP server is configured in Roo Code's `mcp_settings.json` file. This enables AI agents to interact with Jira through the Model Context Protocol.
+
+#### Configuration File Location
+```
+~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json
+```
+
+#### Basic Setup
+
+Add the following configuration to your `mcp_settings.json`:
 
 ```json
 "jira-sync": {
@@ -592,8 +601,8 @@ The jira-sync MCP server is configured in Roo Code's `mcp_settings.json`:
     "run",
     "--rm",
     "-i",
-    "-e", "JIRA_URL=https://cmext.ahrq.gov/jira",
-    "-e", "JIRA_TOKEN=your-token",
+    "-e", "JIRA_URL=https://your-jira-instance.com",
+    "-e", "JIRA_TOKEN=your-jira-api-token",
     "-e", "JIRA_PROJECT_KEY=CLOUD",
     "ghcr.io/riva-solutions/jira-sync:latest"
   ],
@@ -613,6 +622,63 @@ The jira-sync MCP server is configured in Roo Code's `mcp_settings.json`:
 }
 ```
 
+#### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `JIRA_URL` | ✅ Yes | Your Jira instance URL (e.g., `https://cmext.ahrq.gov/jira`) |
+| `JIRA_TOKEN` | ✅ Yes | Jira API token for authentication |
+| `JIRA_PROJECT_KEY` | ✅ Yes | Default Jira project key (e.g., `CLOUD`) |
+
+#### Available Tools
+
+Once configured, use the `@jira-sync` MCP server in Roo Code conversations:
+
+- **search_jira_issues** — Search for issues using JQL
+- **get_jira_issue** — Retrieve issue details
+- **create_jira_issue** — Create new issues
+- **add_jira_comment** — Add comments to issues
+- **transition_jira_issue** — Change issue status
+- **link_jira_issues** — Link related issues
+- **create_jira_subtask** — Create subtasks
+- **link_github_pr_remote** — Link GitHub PRs to Jira
+- **change_issue_status** — Auto-discover and transition issues
+
+#### Example Usage in Roo Code
+
+```
+@jira-sync search_jira_issues project=CLOUD AND status=Open
+@jira-sync get_jira_issue CLOUD-1952
+@jira-sync create_jira_issue project_key=CLOUD issue_type=Task summary="New feature"
+```
+
+#### Docker Prerequisites
+
+- Docker must be installed and running
+- Authenticate with GitHub Container Registry: `docker login ghcr.io`
+- Pull the image: `docker pull ghcr.io/riva-solutions/jira-sync:latest`
+
+#### Troubleshooting
+
+**Issue: "Docker image not found"**
+- Ensure Docker is running: `docker ps`
+- Verify GHCR authentication: `docker login ghcr.io`
+- Pull the image manually: `docker pull ghcr.io/riva-solutions/jira-sync:latest`
+
+**Issue: "Authentication failed"**
+- Verify `JIRA_TOKEN` is correct and not expired
+- Check `JIRA_URL` is accessible from your network
+- Ensure token has appropriate Jira permissions
+
+**Issue: "Connection refused"**
+- Verify Docker daemon is running
+- Check firewall rules allow Docker socket access
+- Restart Docker: `docker restart`
+
+#### For More Information
+
+See the [Jira Manager Skill](./skills/jira-manager/SKILL.md) documentation for detailed workflows and examples.
+
 ---
 
 ## References
@@ -623,6 +689,7 @@ The jira-sync MCP server is configured in Roo Code's `mcp_settings.json`:
 - [Jira Remote Issue Links API](https://developer.atlassian.com/cloud/jira/platform/rest/v2/api-group-issue-remote-links/)
 - [GitHub Webhook Events](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads)
 - [Roo Code Skills Documentation](https://docs.rooveterinary.com/skills)
+- [Jira Manager Skill](./skills/jira-manager/SKILL.md)
 - [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
 
 ## License
