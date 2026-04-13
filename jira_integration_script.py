@@ -22,7 +22,7 @@ from typing import Optional, Dict, Any, List, Tuple
 from urllib.parse import urljoin
 
 # Configuration - Use environment variables for security
-JIRA_URL = os.getenv("JIRA_URL", "https://cmext.ahrq.gov/jira")
+JIRA_URL = os.getenv("JIRA_URL", "https://your-jira-instance.com/jira")
 JIRA_TOKEN = os.getenv(
     "JIRA_TOKEN",
     os.getenv("JIRA_PERSONAL_TOKEN",
@@ -421,7 +421,7 @@ def link_github_pr_remote(issue_key: str, pr_url: str, pr_title: str) -> bool:
     
     Args:
         issue_key (str): Jira issue key (e.g., 'CLOUD-1234')
-        pr_url (str): GitHub PR URL (e.g., 'https://github.com/AHRQ/repo/pull/123')
+        pr_url (str): GitHub PR URL (e.g., 'https://github.com/your-org/repo/pull/123')
         pr_title (str): GitHub PR title for display
     
     Returns:

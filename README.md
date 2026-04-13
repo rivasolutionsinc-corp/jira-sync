@@ -1,6 +1,6 @@
 # Jira & GitHub Workflow Automation
 
-Automated integration between GitHub and self-hosted Jira (cmext.ahrq.gov/jira) for the AHRQ Drupal ecosystem using a containerized Docker Action.
+Automated integration between GitHub and self-hosted Jira (your-jira-instance.com/jira) for the your-organization Drupal ecosystem using a containerized Docker Action.
 
 ## Overview
 
@@ -80,7 +80,7 @@ GitHub Actions Workflow (.github/workflows/jira-sync.yml)
     ↓
 Docker Container Action (ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest)
     ↓
-Jira Server (cmext.ahrq.gov/jira)
+Jira Server (your-jira-instance.com/jira)
 ```
 
 ### Workflow Execution Flow
@@ -127,7 +127,7 @@ Main workflow file that orchestrates Jira integrations:
 ```yaml
 - uses: ./.github/actions/jira-sync
   with:
-    jira-url: 'https://cmext.ahrq.gov/jira'
+    jira-url: 'https://your-jira-instance.com/jira'
     jira-token: ${{ secrets.JIRA_TOKEN }}
     project-key: 'CLOUD'
     event-name: ${{ github.event_name }}
@@ -168,7 +168,7 @@ Main workflow file that orchestrates Jira integrations:
    - API access permission
    - Issue creation permission
    - Comment creation permission
-3. Test token: `curl -H "Authorization: Bearer $TOKEN" https://cmext.ahrq.gov/jira/rest/api/2/myself`
+3. Test token: `curl -H "Authorization: Bearer $TOKEN" https://your-jira-instance.com/jira/rest/api/2/myself`
 
 ### Step 3: Test the Workflow
 
@@ -206,7 +206,7 @@ Main workflow file that orchestrates Jira integrations:
 **Cause:** Jira URL is incorrect or Jira is unreachable
 
 **Solution:**
-- Verify `JIRA_URL` is correct (e.g., `https://cmext.ahrq.gov/jira`)
+- Verify `JIRA_URL` is correct (e.g., `https://your-jira-instance.com/jira`)
 - Check network connectivity to Jira server
 - Verify firewall rules allow GitHub Actions to reach Jira
 
@@ -247,7 +247,7 @@ docker pull ghcr.io/rivasolutionsinc-corp/jira-sync-action:latest
 
 # Run the action
 docker run --rm \
-  -e JIRA_URL="https://cmext.ahrq.gov/jira" \
+  -e JIRA_URL="https://your-jira-instance.com/jira" \
   -e JIRA_TOKEN="your-token" \
   -e PROJECT_KEY="CLOUD" \
   -e EVENT_NAME="pull_request" \
@@ -482,4 +482,4 @@ For issues or questions:
 
 ## License
 
-This project is part of the AHRQ Drupal ecosystem and follows AHRQ licensing guidelines.
+This project is part of the your-organization Drupal ecosystem and follows your-organization licensing guidelines.

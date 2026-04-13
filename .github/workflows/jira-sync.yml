@@ -19,7 +19,7 @@ on:
       - 'v*.*.*'
 
 env:
-  JIRA_URL: 'https://cmext.ahrq.gov/jira'
+  JIRA_URL: 'https://your-jira-instance.com/jira'
   PROJECT_KEY: 'CLOUD'
 
 jobs:

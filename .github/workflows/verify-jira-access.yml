@@ -28,7 +28,7 @@ jobs:
           import os
           import requests
           
-          JIRA_URL = 'https://cmext.ahrq.gov/jira'
+          JIRA_URL = 'https://your-jira-instance.com/jira'
           JIRA_TOKEN = os.getenv('JIRA_TOKEN')
           
           if not JIRA_TOKEN:

@@ -2,11 +2,11 @@ name: 'Jira Sync'
 description: >
   Sync GitHub Issues and PRs to a self-hosted Jira Data Center instance
   using a custom Docker container with REST API integration.
-author: 'AHRQ DevOps'
+author: 'DevOps Team'
 
 inputs:
   jira-url:
-    description: 'Base URL of the self-hosted Jira Data Center instance (e.g. https://cmext.ahrq.gov/jira)'
+    description: 'Base URL of the self-hosted Jira Data Center instance (e.g. https://your-jira-instance.com/jira)'
     required: true
   jira-username:
     description: >
