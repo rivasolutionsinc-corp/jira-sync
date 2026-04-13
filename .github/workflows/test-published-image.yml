@@ -29,7 +29,7 @@ jobs:
       - name: Test Jira connectivity - List issues
         run: |
           docker run --rm \
-            -e JIRA_URL="${{ secrets.JIRA_URL || 'https://cmext.ahrq.gov/jira' }}" \
+            -e JIRA_URL="${{ secrets.JIRA_URL }}" \
             -e JIRA_TOKEN="${{ secrets.JIRA_TOKEN }}" \
             -e PROJECT_KEY="CLOUD" \
             -v ${{ github.workspace }}/.github/actions/jira-sync/test_jira_connectivity.py:/test_jira_connectivity.py \

@@ -19,7 +19,7 @@ on:
       - 'v*.*.*'
 
 env:
-  JIRA_URL: 'https://cmext.ahrq.gov/jira'
+  JIRA_URL: ${{ secrets.JIRA_URL }}
   PROJECT_KEY: 'CLOUD'
 
 jobs:
@@ -48,10 +48,10 @@ jobs:
       - name: Run Jira Sync Action
         uses: ./.github/actions/jira-sync
         with:
-          jira-url: ${{ env.JIRA_URL }}
+          jira-url: ${{ secrets.JIRA_URL }}
           jira-username: ${{ secrets.JIRA_USERNAME }}
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
-          project-key: ${{ env.PROJECT_KEY }}
+          project-key: ${{ secrets.JIRA_PROJECT_KEY }}
           event-name: ${{ github.event_name }}
           issue-title: ${{ github.event.issue.title }}
           issue-url: ${{ github.event.issue.html_url }}
@@ -88,10 +88,10 @@ jobs:
         if: github.ref_name == 'develop'
         uses: ./.github/actions/jira-sync
         with:
-          jira-url: ${{ env.JIRA_URL }}
+          jira-url: ${{ secrets.JIRA_URL }}
           jira-username: ${{ secrets.JIRA_USERNAME }}
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
-          project-key: ${{ env.PROJECT_KEY }}
+          project-key: ${{ secrets.JIRA_PROJECT_KEY }}
           event-name: 'push'
           push-branch: ${{ github.ref_name }}
           target-branch: 'develop'
@@ -104,10 +104,10 @@ jobs:
         if: github.ref_name == 'stage'
         uses: ./.github/actions/jira-sync
         with:
-          jira-url: ${{ env.JIRA_URL }}
+          jira-url: ${{ secrets.JIRA_URL }}
           jira-username: ${{ secrets.JIRA_USERNAME }}
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
-          project-key: ${{ env.PROJECT_KEY }}
+          project-key: ${{ secrets.JIRA_PROJECT_KEY }}
           event-name: 'push'
           push-branch: ${{ github.ref_name }}
           target-branch: 'stage'
@@ -120,10 +120,10 @@ jobs:
         if: github.ref_name == 'main'
         uses: ./.github/actions/jira-sync
         with:
-          jira-url: ${{ env.JIRA_URL }}
+          jira-url: ${{ secrets.JIRA_URL }}
           jira-username: ${{ secrets.JIRA_USERNAME }}
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
-          project-key: ${{ env.PROJECT_KEY }}
+          project-key: ${{ secrets.JIRA_PROJECT_KEY }}
           event-name: 'push'
           push-branch: ${{ github.ref_name }}
           target-branch: 'main'
@@ -154,10 +154,10 @@ jobs:
       - name: Handle feature branch push (In Progress)
         uses: ./.github/actions/jira-sync
         with:
-          jira-url: ${{ env.JIRA_URL }}
+          jira-url: ${{ secrets.JIRA_URL }}
           jira-username: ${{ secrets.JIRA_USERNAME }}
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
-          project-key: ${{ env.PROJECT_KEY }}
+          project-key: ${{ secrets.JIRA_PROJECT_KEY }}
           event-name: 'push'
           pr-branch: ${{ github.ref_name }}
           issue-type: 'Task'
@@ -184,10 +184,10 @@ jobs:
       - name: Handle production tag (Deployed)
         uses: ./.github/actions/jira-sync
         with:
-          jira-url: ${{ env.JIRA_URL }}
+          jira-url: ${{ secrets.JIRA_URL }}
           jira-username: ${{ secrets.JIRA_USERNAME }}
           jira-personal-token: ${{ secrets.JIRA_PERSONAL_TOKEN }}
-          project-key: ${{ env.PROJECT_KEY }}
+          project-key: ${{ secrets.JIRA_PROJECT_KEY }}
           event-name: 'create'
           tag-name: ${{ github.event.ref }}
           tag-ref: ${{ github.event.master_branch }}
