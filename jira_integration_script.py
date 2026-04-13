@@ -22,7 +22,7 @@ from typing import Optional, Dict, Any, List, Tuple
 from urllib.parse import urljoin
 
 # Configuration - Use environment variables for security
-JIRA_URL = os.getenv("JIRA_URL", "https://your-jira-instance.com/jira")
+JIRA_URL = os.getenv("JIRA_URL")
 JIRA_TOKEN = os.getenv(
     "JIRA_TOKEN",
     os.getenv("JIRA_PERSONAL_TOKEN",
@@ -421,7 +421,7 @@ def link_github_pr_remote(issue_key: str, pr_url: str, pr_title: str) -> bool:
     
     Args:
         issue_key (str): Jira issue key (e.g., 'CLOUD-1234')
-        pr_url (str): GitHub PR URL (e.g., 'https://github.com/your-org/repo/pull/123')
+        pr_url (str): GitHub PR URL (e.g., 'https://github.com/AHRQ/repo/pull/123')
         pr_title (str): GitHub PR title for display
     
     Returns:
@@ -790,12 +790,11 @@ def handle_pull_request_event(args) -> bool:
             log_action(f"Failed to link PR to issue", level="ERROR", issue_key=jira_key)
             success = False
         
-        # Transition issue if configured (use new transition-on-open or fallback to transition-opened)
-        transition = args.transition_on_open or args.transition_opened
-        if transition:
-            if not change_issue_status(jira_key, transition):
+        # Transition issue if configured
+        if args.transition_opened:
+            if not change_issue_status(jira_key, args.transition_opened):
                 log_action(f"Failed to transition issue on PR opened", level="ERROR",
-                          issue_key=jira_key, transition=transition)
+                          issue_key=jira_key, transition=args.transition_opened)
                 success = False
     
     elif args.pr_action == "synchronize":
@@ -812,13 +811,11 @@ def handle_pull_request_event(args) -> bool:
             log_action(f"Failed to link PR to issue", level="ERROR", issue_key=jira_key)
             success = False
         
-        # Transition issue if PR was merged (use new is-merged or fallback to pr-merged)
-        is_merged = args.is_merged or args.pr_merged
-        transition = args.transition_on_merge or args.transition_merged
-        if is_merged and transition:
-            if not change_issue_status(jira_key, transition):
+        # Transition issue if PR was merged
+        if args.pr_merged and args.transition_merged:
+            if not change_issue_status(jira_key, args.transition_merged):
                 log_action(f"Failed to transition issue on PR merged", level="ERROR",
-                          issue_key=jira_key, transition=transition)
+                          issue_key=jira_key, transition=args.transition_merged)
                 success = False
     
     return success
@@ -960,12 +957,12 @@ def handle_tag_event(args) -> bool:
         log_action(f"Failed to add production deployment comment", level="WARNING", issue_key=jira_key)
         success = False
     
-    # Transition issue to Deployed if configured (use new transition-on-tag or fallback to transition-tag)
-    transition = getattr(args, 'transition_on_tag', None) or getattr(args, 'transition_tag', 'Deployed')
-    if transition:
-        if not change_issue_status(jira_key, transition):
+    # Transition issue to Deployed if configured
+    transition_tag = getattr(args, 'transition_tag', 'Deployed')
+    if transition_tag:
+        if not change_issue_status(jira_key, transition_tag):
             log_action(f"Failed to transition issue on tag creation", level="ERROR",
-                      issue_key=jira_key, transition=transition)
+                      issue_key=jira_key, transition=transition_tag)
             return False
     
     return success
@@ -1045,12 +1042,6 @@ Examples:
     parser.add_argument("--jira-token", required=True, help="Jira API token")
     parser.add_argument("--project-key", required=True, help="Jira project key")
     
-    # Event action and merge status (Phase 3: Public Release)
-    parser.add_argument("--event-action", default="created",
-                       help="GitHub event action (opened, closed, synchronize, created)")
-    parser.add_argument("--is-merged", action="store_true",
-                       help="Flag indicating PR was merged (alternative to --pr-merged)")
-    
     # Issues event arguments
     parser.add_argument("--issue-title", default="", help="GitHub issue title")
     parser.add_argument("--issue-url", default="", help="GitHub issue URL")
@@ -1080,14 +1071,6 @@ Examples:
                        help="Jira transition name when PR is merged (e.g., 'Done')")
     parser.add_argument("--transition-tag", default="",
                        help="Jira transition name when pushed to target branch or tag created (e.g., 'Deployed')")
-    
-    # New transition arguments (Phase 3: Public Release - Dynamic State Mapping)
-    parser.add_argument("--transition-on-open", default="In Review",
-                       help="Jira transition when PR/Issue is opened (default: 'In Review')")
-    parser.add_argument("--transition-on-merge", default="Done",
-                       help="Jira transition when PR is merged (default: 'Done')")
-    parser.add_argument("--transition-on-tag", default="Deployed",
-                       help="Jira transition when tag is created (default: 'Deployed')")
     
     # Event routing arguments (Phase 1 generalization)
     parser.add_argument("--target-branch", default="",
