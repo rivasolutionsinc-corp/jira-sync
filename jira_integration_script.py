@@ -22,7 +22,7 @@ from typing import Optional, Dict, Any, List, Tuple
 from urllib.parse import urljoin
 
 # Configuration - Use environment variables for security
-JIRA_URL = os.getenv("JIRA_URL", "https://cmext.ahrq.gov/jira")
+JIRA_URL = os.getenv("JIRA_URL")
 JIRA_TOKEN = os.getenv(
     "JIRA_TOKEN",
     os.getenv("JIRA_PERSONAL_TOKEN",

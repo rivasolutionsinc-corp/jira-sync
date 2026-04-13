@@ -29,8 +29,8 @@ import jira_integration_script as jira
 
 # Test Configuration
 TEST_CONFIG = {
-    "jira_url": os.getenv("JIRA_BASE_URL", "https://cmext.ahrq.gov/jira"),
-    "jira_token": os.getenv("JIRA_PAT", ""),
+    "jira_url": os.getenv("JIRA_URL"),
+    "jira_token": os.getenv("JIRA_TOKEN", os.getenv("JIRA_PERSONAL_TOKEN", os.getenv("JIRA_API_TOKEN", os.getenv("JIRA_PAT", "")))),
     "project_key": "CLOUD",
     "test_issue_key": "CLOUD-1952",  # Use the issue we just created
     "github_pr_url": "https://github.com/rivasolutionsinc-corp/jira-sync/pull/44",
