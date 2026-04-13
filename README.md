@@ -486,6 +486,135 @@ When updating the action for consumers:
 
 ---
 
+---
+
+## Roo Code Integration
+
+### Jira Manager Skill
+
+A specialized Roo Code skill is available for interactive Jira management. The skill provides access to 10 Jira operations through the `@jira-sync` MCP server.
+
+**Location:** `~/.roo/skills/jira-manager/SKILL.md`
+
+**Available Operations:**
+- Search for issues using JQL queries
+- Create new Jira issues
+- Get issue details and transitions
+- Add comments to issues
+- Transition issues to new statuses
+- Link Jira issues together
+- Create subtasks
+- Link GitHub PRs to Jira issues
+- Change issue status with auto-discovery
+
+**How to Use:**
+
+1. **Explicit Request:**
+   ```
+   "Use the Jira Manager skill to search for open CLOUD issues"
+   ```
+
+2. **Keyword Detection:**
+   ```
+   "Search for all open CLOUD issues"
+   ```
+
+3. **Direct Command:**
+   ```
+   @jira-sync search_jira_issues project=CLOUD AND status=Open
+   ```
+
+**Example Workflows:**
+
+Create and link a PR:
+```
+"Create a new CLOUD issue and link it to PR #44"
+```
+
+Search and update:
+```
+"Search for open CLOUD issues and add a comment to the first one"
+```
+
+### Docker Image
+
+The jira-sync Docker image is published to GitHub Container Registry (GHCR):
+
+**Image:** `ghcr.io/riva-solutions/jira-sync:latest`
+**Tags:** `latest`, `v1.0.0`
+**Size:** 234MB (50.9MB compressed)
+
+**Pull the image:**
+```bash
+docker pull ghcr.io/riva-solutions/jira-sync:latest
+```
+
+**Run directly:**
+```bash
+docker run --rm -i \
+  -e JIRA_URL="https://cmext.ahrq.gov/jira" \
+  -e JIRA_TOKEN="your-token" \
+  -e JIRA_PROJECT_KEY="CLOUD" \
+  ghcr.io/riva-solutions/jira-sync:latest
+```
+
+**Use in GitHub Actions:**
+```yaml
+- name: Run Jira Sync
+  uses: docker://ghcr.io/riva-solutions/jira-sync:latest
+  env:
+    JIRA_URL: ${{ secrets.JIRA_URL }}
+    JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+    JIRA_PROJECT_KEY: CLOUD
+```
+
+**Use in Docker Compose:**
+```yaml
+version: '3.8'
+
+services:
+  jira-sync:
+    image: ghcr.io/riva-solutions/jira-sync:latest
+    environment:
+      - JIRA_URL=https://cmext.ahrq.gov/jira
+      - JIRA_TOKEN=your-token
+      - JIRA_PROJECT_KEY=CLOUD
+```
+
+### MCP Server Configuration
+
+The jira-sync MCP server is configured in Roo Code's `mcp_settings.json`:
+
+```json
+"jira-sync": {
+  "command": "docker",
+  "args": [
+    "run",
+    "--rm",
+    "-i",
+    "-e", "JIRA_URL=https://cmext.ahrq.gov/jira",
+    "-e", "JIRA_TOKEN=your-token",
+    "-e", "JIRA_PROJECT_KEY=CLOUD",
+    "ghcr.io/riva-solutions/jira-sync:latest"
+  ],
+  "disabled": false,
+  "alwaysAllow": [
+    "search_jira_issues",
+    "get_jira_issue",
+    "create_jira_issue",
+    "add_jira_comment",
+    "list_jira_transitions",
+    "transition_jira_issue",
+    "link_jira_issues",
+    "create_jira_subtask",
+    "link_github_pr_remote",
+    "change_issue_status"
+  ]
+}
+```
+
+---
+
 ## References
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
@@ -493,6 +622,8 @@ When updating the action for consumers:
 - [Jira REST API v2 Documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v2/)
 - [Jira Remote Issue Links API](https://developer.atlassian.com/cloud/jira/platform/rest/v2/api-group-issue-remote-links/)
 - [GitHub Webhook Events](https://docs.github.com/en/developers/webhooks-and-events/webhooks/webhook-events-and-payloads)
+- [Roo Code Skills Documentation](https://docs.rooveterinary.com/skills)
+- [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
 
 ## License
 
